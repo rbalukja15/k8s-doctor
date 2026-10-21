@@ -1,0 +1,21 @@
+# Build output
+/bin/
+/dist/
+
+# Tool and schema caches (see `make tools` / `make schemas`)
+/.cache/
+
+# Test and coverage output
+*.out
+*.test
+coverage.*
+
+# Generated reports
+/report.html
+/report.json
+
+# Local config and editor files
+.k8s-doctor.local.yaml
+.idea/
+.vscode/
+.DS_Store
