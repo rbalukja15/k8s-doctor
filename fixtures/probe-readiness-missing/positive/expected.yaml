@@ -1,0 +1,11 @@
+description: "The readiness probe is set on the sidecar instead of the app container, and a StatefulSet has none."
+kind: positive
+rules:
+  - probe-readiness-missing
+findings:
+  - rule: probe-readiness-missing
+    resource: Deployment/shop/orders
+    field: spec.template.spec.containers[name=app].readinessProbe
+  - rule: probe-readiness-missing
+    resource: StatefulSet/shop/cache
+    field: spec.template.spec.containers[name=redis].readinessProbe

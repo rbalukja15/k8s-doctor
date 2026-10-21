@@ -1,0 +1,114 @@
+{
+  "schemaVersion": "v1alpha1",
+  "mode": "manifest",
+  "source": {
+    "path": "fixtures/image-pull-policy-stale/near-miss"
+  },
+  "spec": {
+    "namespaces": [
+      {
+        "name": "shop"
+      }
+    ],
+    "workloads": [
+      {
+        "kind": "Deployment",
+        "apiVersion": "apps/v1",
+        "name": "worker",
+        "namespace": "shop",
+        "labels": {
+          "app": "worker"
+        },
+        "replicas": 2,
+        "selector": {
+          "app": "worker"
+        },
+        "template": {
+          "labels": {
+            "app": "worker"
+          },
+          "spec": {
+            "securityContext": {
+              "runAsNonRoot": true
+            },
+            "containers": [
+              {
+                "name": "app",
+                "image": "ghcr.io/acme/worker:latest",
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "memory": "256Mi"
+                  }
+                },
+                "readinessProbe": {
+                  "handler": "httpGet",
+                  "path": "/healthz",
+                  "port": "8080",
+                  "periodSeconds": 10
+                },
+                "livenessProbe": {
+                  "handler": "httpGet",
+                  "path": "/livez",
+                  "port": "8080",
+                  "periodSeconds": 10
+                },
+                "securityContext": {
+                  "runAsNonRoot": true,
+                  "allowPrivilegeEscalation": false,
+                  "readOnlyRootFilesystem": true
+                },
+                "ports": [
+                  {
+                    "name": "http",
+                    "containerPort": 8080
+                  }
+                ]
+              },
+              {
+                "name": "helper",
+                "image": "ghcr.io/acme/helper:3.2.0",
+                "imagePullPolicy": "IfNotPresent",
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "memory": "256Mi"
+                  }
+                },
+                "readinessProbe": {
+                  "handler": "httpGet",
+                  "path": "/healthz",
+                  "port": "8080",
+                  "periodSeconds": 10
+                },
+                "livenessProbe": {
+                  "handler": "httpGet",
+                  "path": "/livez",
+                  "port": "8080",
+                  "periodSeconds": 10
+                },
+                "securityContext": {
+                  "runAsNonRoot": true,
+                  "allowPrivilegeEscalation": false,
+                  "readOnlyRootFilesystem": true
+                },
+                "ports": [
+                  {
+                    "name": "http",
+                    "containerPort": 8080
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

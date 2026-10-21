@@ -1,0 +1,8 @@
+description: "Requests and a CPU limit are set, but there is no memory limit."
+kind: positive
+rules:
+  - resources-memory-limit-missing
+findings:
+  - rule: resources-memory-limit-missing
+    resource: Deployment/shop/search
+    field: spec.template.spec.containers[name=app].resources.limits.memory

@@ -1,0 +1,11 @@
+description: "A latest-tagged image with imagePullPolicy IfNotPresent, and an untagged one with Never."
+kind: positive
+rules:
+  - image-pull-policy-stale
+findings:
+  - rule: image-pull-policy-stale
+    resource: Deployment/shop/worker
+    field: spec.template.spec.containers[name=app].imagePullPolicy
+  - rule: image-pull-policy-stale
+    resource: Deployment/shop/worker
+    field: spec.template.spec.containers[name=helper].imagePullPolicy

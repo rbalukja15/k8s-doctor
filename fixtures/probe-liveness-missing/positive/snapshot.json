@@ -1,0 +1,71 @@
+{
+  "schemaVersion": "v1alpha1",
+  "mode": "manifest",
+  "source": {
+    "path": "fixtures/probe-liveness-missing/positive"
+  },
+  "spec": {
+    "namespaces": [
+      {
+        "name": "monitoring"
+      }
+    ],
+    "workloads": [
+      {
+        "kind": "DaemonSet",
+        "apiVersion": "apps/v1",
+        "name": "node-exporter",
+        "namespace": "monitoring",
+        "labels": {
+          "app": "node-exporter"
+        },
+        "selector": {
+          "app": "node-exporter"
+        },
+        "template": {
+          "labels": {
+            "app": "node-exporter"
+          },
+          "spec": {
+            "securityContext": {
+              "runAsNonRoot": true
+            },
+            "containers": [
+              {
+                "name": "exporter",
+                "image": "quay.io/prometheus/node-exporter:v1.8.2",
+                "imagePullPolicy": "IfNotPresent",
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "memory": "256Mi"
+                  }
+                },
+                "readinessProbe": {
+                  "handler": "httpGet",
+                  "path": "/healthz",
+                  "port": "8080",
+                  "periodSeconds": 10
+                },
+                "securityContext": {
+                  "runAsNonRoot": true,
+                  "allowPrivilegeEscalation": false,
+                  "readOnlyRootFilesystem": true
+                },
+                "ports": [
+                  {
+                    "name": "http",
+                    "containerPort": 8080
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,11 @@
+description: "One container with no requests at all, and one with a CPU request but no memory request."
+kind: positive
+rules:
+  - resources-requests-missing
+findings:
+  - rule: resources-requests-missing
+    resource: Deployment/shop/checkout
+    field: spec.template.spec.containers[name=app].resources.requests
+  - rule: resources-requests-missing
+    resource: Deployment/shop/checkout
+    field: spec.template.spec.containers[name=proxy].resources.requests

@@ -1,0 +1,111 @@
+{
+  "schemaVersion": "v1alpha1",
+  "mode": "manifest",
+  "source": {
+    "path": "fixtures/probe-readiness-missing/near-miss"
+  },
+  "spec": {
+    "namespaces": [
+      {
+        "name": "shop"
+      }
+    ],
+    "workloads": [
+      {
+        "kind": "Job",
+        "apiVersion": "batch/v1",
+        "name": "migrate",
+        "namespace": "shop",
+        "labels": {
+          "app": "migrate"
+        },
+        "selector": {
+          "app": "migrate"
+        },
+        "template": {
+          "labels": {
+            "app": "migrate"
+          },
+          "spec": {
+            "securityContext": {
+              "runAsNonRoot": true
+            },
+            "containers": [
+              {
+                "name": "migrate",
+                "image": "ghcr.io/acme/migrate:1.4.2",
+                "imagePullPolicy": "IfNotPresent",
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "memory": "256Mi"
+                  }
+                },
+                "securityContext": {
+                  "runAsNonRoot": true,
+                  "allowPrivilegeEscalation": false,
+                  "readOnlyRootFilesystem": true
+                },
+                "ports": [
+                  {
+                    "name": "http",
+                    "containerPort": 8080
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      {
+        "kind": "CronJob",
+        "apiVersion": "batch/v1",
+        "name": "cleanup",
+        "namespace": "shop",
+        "labels": {
+          "app": "cleanup"
+        },
+        "template": {
+          "labels": {
+            "app": "cleanup"
+          },
+          "spec": {
+            "securityContext": {
+              "runAsNonRoot": true
+            },
+            "containers": [
+              {
+                "name": "cleanup",
+                "image": "ghcr.io/acme/cleanup:0.3.0",
+                "imagePullPolicy": "IfNotPresent",
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "memory": "256Mi"
+                  }
+                },
+                "securityContext": {
+                  "runAsNonRoot": true,
+                  "allowPrivilegeEscalation": false,
+                  "readOnlyRootFilesystem": true
+                },
+                "ports": [
+                  {
+                    "name": "http",
+                    "containerPort": 8080
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

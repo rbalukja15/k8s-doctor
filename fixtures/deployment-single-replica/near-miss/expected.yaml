@@ -1,0 +1,5 @@
+description: "replicas: 1 under an HPA with minReplicas 3, a Deployment scaled to zero, and a single-replica StatefulSet."
+kind: near-miss
+rules:
+  - deployment-single-replica
+findings: []

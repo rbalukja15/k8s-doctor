@@ -1,0 +1,5 @@
+description: "Jobs and CronJobs without probes run to completion and take no traffic, so they are not flagged."
+kind: near-miss
+rules:
+  - probe-readiness-missing
+findings: []

@@ -1,0 +1,133 @@
+{
+  "schemaVersion": "v1alpha1",
+  "mode": "cluster",
+  "source": {
+    "cluster": "kind-k8s-doctor"
+  },
+  "spec": {
+    "namespaces": [
+      {
+        "name": "shop"
+      }
+    ],
+    "workloads": [
+      {
+        "kind": "Deployment",
+        "apiVersion": "apps/v1",
+        "name": "api",
+        "namespace": "shop",
+        "labels": {
+          "app": "api"
+        },
+        "replicas": 2,
+        "selector": {
+          "app": "api"
+        },
+        "template": {
+          "labels": {
+            "app": "api"
+          },
+          "spec": {
+            "securityContext": {
+              "runAsNonRoot": true
+            },
+            "containers": [
+              {
+                "name": "api",
+                "image": "ghcr.io/acme/api:1.4.2",
+                "imagePullPolicy": "IfNotPresent",
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "memory": "256Mi"
+                  }
+                },
+                "readinessProbe": {
+                  "handler": "httpGet",
+                  "path": "/healthz",
+                  "port": "8080",
+                  "periodSeconds": 10
+                },
+                "livenessProbe": {
+                  "handler": "httpGet",
+                  "path": "/livez",
+                  "port": "8080",
+                  "periodSeconds": 10
+                },
+                "securityContext": {
+                  "runAsNonRoot": true,
+                  "allowPrivilegeEscalation": false,
+                  "readOnlyRootFilesystem": true
+                },
+                "ports": [
+                  {
+                    "name": "http",
+                    "containerPort": 8080
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "runtime": {
+    "pods": [
+      {
+        "name": "api-6d4f9c7b8-x2k9p",
+        "namespace": "shop",
+        "owner": {
+          "kind": "Deployment",
+          "namespace": "shop",
+          "name": "api"
+        },
+        "phase": "Running",
+        "nodeName": "worker-1",
+        "containers": [
+          {
+            "name": "api",
+            "ready": true,
+            "restartCount": 0,
+            "state": "running"
+          }
+        ]
+      },
+      {
+        "name": "api-6d4f9c7b8-q7z4m",
+        "namespace": "shop",
+        "owner": {
+          "kind": "Deployment",
+          "namespace": "shop",
+          "name": "api"
+        },
+        "phase": "Running",
+        "nodeName": "worker-2",
+        "containers": [
+          {
+            "name": "api",
+            "ready": true,
+            "restartCount": 0,
+            "state": "running"
+          }
+        ]
+      }
+    ],
+    "events": [
+      {
+        "involvedObject": {
+          "kind": "Pod",
+          "namespace": "shop",
+          "name": "api-6d4f9c7b8-x2k9p"
+        },
+        "type": "Normal",
+        "reason": "Pulled",
+        "message": "Container image already present on machine",
+        "count": 1
+      }
+    ]
+  }
+}

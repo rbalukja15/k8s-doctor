@@ -1,0 +1,14 @@
+description: "Explicit replicas: 1, an unset replica count, and an HPA whose minReplicas defaults to 1."
+kind: positive
+rules:
+  - deployment-single-replica
+findings:
+  - rule: deployment-single-replica
+    resource: Deployment/shop/payments
+    field: spec.replicas
+  - rule: deployment-single-replica
+    resource: Deployment/shop/emails
+    field: spec.replicas
+  - rule: deployment-single-replica
+    resource: Deployment/shop/pricing
+    field: spec.replicas

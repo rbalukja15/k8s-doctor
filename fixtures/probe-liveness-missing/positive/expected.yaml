@@ -1,0 +1,8 @@
+description: "A DaemonSet container with a readiness probe but no liveness probe."
+kind: positive
+rules:
+  - probe-liveness-missing
+findings:
+  - rule: probe-liveness-missing
+    resource: DaemonSet/monitoring/node-exporter
+    field: spec.template.spec.containers[name=exporter].livenessProbe
