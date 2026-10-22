@@ -1,0 +1,5 @@
+description: "A memory limit without a CPU limit is fine: CPU limits are deliberately not required."
+kind: near-miss
+rules:
+  - resources-memory-limit-missing
+findings: []

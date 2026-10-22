@@ -1,0 +1,5 @@
+description: "A registry port with a pinned tag, and a latest tag pinned by digest: both are immutable."
+kind: near-miss
+rules:
+  - image-tag-mutable
+findings: []

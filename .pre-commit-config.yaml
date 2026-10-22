@@ -1,0 +1,34 @@
+# Install with `pre-commit install`. Hooks mirror what CI runs.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: \.md$
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+
+  - repo: local
+    hooks:
+      - id: go-fmt
+        name: gofumpt / goimports
+        entry: make fmt-check
+        language: system
+        pass_filenames: false
+        types: [go]
+      - id: go-lint
+        name: golangci-lint
+        entry: make lint
+        language: system
+        pass_filenames: false
+        types: [go]
+      - id: go-test
+        name: go test
+        entry: make test
+        language: system
+        pass_filenames: false
+        types: [go]

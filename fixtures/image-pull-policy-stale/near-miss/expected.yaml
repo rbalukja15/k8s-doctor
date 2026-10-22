@@ -1,0 +1,5 @@
+description: "Latest with no explicit pull policy (Kubernetes defaults it to Always) and a pinned tag with IfNotPresent."
+kind: near-miss
+rules:
+  - image-pull-policy-stale
+findings: []

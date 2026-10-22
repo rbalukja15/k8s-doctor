@@ -1,0 +1,14 @@
+description: "Images with no tag, an explicit latest tag, and a registry port but no tag."
+kind: positive
+rules:
+  - image-tag-mutable
+findings:
+  - rule: image-tag-mutable
+    resource: Deployment/shop/web
+    field: spec.template.spec.containers[name=nginx].image
+  - rule: image-tag-mutable
+    resource: Deployment/shop/web
+    field: spec.template.spec.containers[name=app].image
+  - rule: image-tag-mutable
+    resource: Deployment/shop/web
+    field: spec.template.spec.containers[name=sidecar].image

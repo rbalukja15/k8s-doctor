@@ -1,0 +1,5 @@
+description: "A container with startup and liveness probes, and a CronJob without probes: neither is flagged."
+kind: near-miss
+rules:
+  - probe-liveness-missing
+findings: []

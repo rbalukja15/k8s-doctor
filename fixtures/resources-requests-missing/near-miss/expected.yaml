@@ -1,0 +1,5 @@
+description: "Limits without requests: Kubernetes copies the limits into the requests, so nothing is missing."
+kind: near-miss
+rules:
+  - resources-requests-missing
+findings: []
