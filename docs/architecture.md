@@ -31,7 +31,7 @@ flowchart LR
 | LLM client, redaction, `--no-llm` | `internal/llm` | #26 | Planned |
 | Explain / correlate | `internal/llm` | #16, #17 | Planned |
 | Patch drafting | — | #18 | Planned |
-| JSON + terminal report, CLI | `internal/report`, `internal/cli` | #20 | Planned |
+| JSON + terminal report, CLI | `internal/report`, `internal/cli` | #20 | Done |
 | HTML report | `internal/report` | #19 | Planned |
 | Eval | — | #21 | Planned |
 

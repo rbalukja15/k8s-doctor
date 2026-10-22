@@ -1,65 +1,102 @@
-// Package cli implements the k8s-doctor command line. The full interface
-// (cluster and manifest modes, JSON output, exit codes) lands with #20.
+// Package cli implements the k8s-doctor command line.
 package cli
 
 import (
-	"errors"
-	"flag"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"text/tabwriter"
 
-	"github.com/rbalukja15/k8s-doctor/internal/config"
+	"github.com/rbalukja15/k8s-doctor/internal/report"
 	"github.com/rbalukja15/k8s-doctor/internal/rules"
 	"github.com/rbalukja15/k8s-doctor/internal/rules/checks"
-	"github.com/rbalukja15/k8s-doctor/internal/snapshot"
 	"github.com/rbalukja15/k8s-doctor/internal/version"
 )
 
 const usage = `k8s-doctor: a read-only SRE health check for Kubernetes clusters and manifests.
 
 Usage:
-  k8s-doctor <command> [flags]
+  k8s-doctor check [flags]     (or just: k8s-doctor [flags])
+  k8s-doctor <command>
 
 Commands:
-  check     Run the rules against a snapshot file
+  check     Analyze a snapshot, cluster or manifests folder and report findings
   rules     List the built-in rules
+  schema    Print the JSON Schema of the --format json report
   version   Print the version
   help      Show this help
 
-Run "k8s-doctor <command> -h" for command flags.
+Run "k8s-doctor check -h" for check flags and exit codes.
 `
 
-// Exit codes.
+// Exit codes. Codes 10-13 mean the run succeeded and found problems at or
+// above --fail-on; the code says how bad the worst one is.
 const (
-	ExitOK    = 0
-	ExitError = 1
-	ExitUsage = 2
+	ExitOK            = 0
+	ExitError         = 1
+	ExitUsage         = 2
+	ExitFindingLow    = 10
+	ExitFindingMedium = 11
+	ExitFindingHigh   = 12
+	ExitFindingCrit   = 13
 )
+
+// ExitCodeFor returns the exit code for a worst finding severity.
+func ExitCodeFor(s rules.Severity) int {
+	switch s {
+	case rules.SeverityCritical:
+		return ExitFindingCrit
+	case rules.SeverityHigh:
+		return ExitFindingHigh
+	case rules.SeverityMedium:
+		return ExitFindingMedium
+	default:
+		return ExitFindingLow
+	}
+}
+
+// Env is the process environment the CLI runs in, injectable for tests.
+type Env struct {
+	Stdout, Stderr io.Writer
+	Getenv         func(string) string
+}
 
 // Run executes the CLI with args (without the program name) and returns the
 // process exit code.
 func Run(args []string, stdout, stderr io.Writer) int {
+	return RunEnv(args, Env{Stdout: stdout, Stderr: stderr, Getenv: os.Getenv})
+}
+
+// RunEnv is Run with an explicit environment.
+func RunEnv(args []string, env Env) int {
 	if len(args) == 0 {
-		fmt.Fprint(stdout, usage)
+		fmt.Fprint(env.Stdout, usage)
 		return ExitOK
 	}
 	switch args[0] {
 	case "help", "-h", "--help":
-		fmt.Fprint(stdout, usage)
+		fmt.Fprint(env.Stdout, usage)
 		return ExitOK
 	case "version", "--version":
-		fmt.Fprintln(stdout, "k8s-doctor", version.Version)
+		fmt.Fprintln(env.Stdout, "k8s-doctor", version.Version)
 		return ExitOK
 	case "rules":
-		return listRules(stdout)
+		return listRules(env.Stdout)
+	case "schema":
+		if _, err := env.Stdout.Write(report.Schema); err != nil {
+			return ExitError
+		}
+		return ExitOK
 	case "check":
-		return check(args[1:], stdout, stderr)
-	default:
-		fmt.Fprintf(stderr, "unknown command %q\n\n%s", args[0], usage)
-		return ExitUsage
+		return check(args[1:], env)
 	}
+	// Bare flags mean check: `k8s-doctor --manifests ./deploy`.
+	if strings.HasPrefix(args[0], "-") {
+		return check(args, env)
+	}
+	fmt.Fprintf(env.Stderr, "unknown command %q\n\n%s", args[0], usage)
+	return ExitUsage
 }
 
 func listRules(stdout io.Writer) int {
@@ -76,64 +113,4 @@ func listRules(stdout io.Writer) int {
 		return ExitError
 	}
 	return ExitOK
-}
-
-func check(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("check", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	snapPath := fs.String("snapshot", "", "path to a snapshot JSON file (required)")
-	cfgPath := fs.String("config", "", "path to a config file (default: ./"+config.DefaultFileName+" if present)")
-	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return ExitOK
-		}
-		return ExitUsage
-	}
-	if *snapPath == "" {
-		fmt.Fprintln(stderr, "check: --snapshot is required")
-		fs.Usage()
-		return ExitUsage
-	}
-
-	cfg, err := loadConfig(*cfgPath)
-	if err != nil {
-		fmt.Fprintln(stderr, "check:", err)
-		return ExitError
-	}
-	snap, err := snapshot.Load(*snapPath)
-	if err != nil {
-		fmt.Fprintln(stderr, "check:", err)
-		return ExitError
-	}
-	engine, err := rules.NewEngine(checks.Registry(), cfg)
-	if err != nil {
-		fmt.Fprintln(stderr, "check:", err)
-		return ExitError
-	}
-	res := engine.Run(snap)
-
-	tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "SEVERITY\tRULE\tRESOURCE\tMESSAGE")
-	for _, f := range res.Findings {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", f.Severity, f.RuleID, f.Resource, f.Message)
-	}
-	if err := tw.Flush(); err != nil {
-		return ExitError
-	}
-	fmt.Fprintf(stdout, "\n%d finding(s), %d rule(s) run", len(res.Findings), len(res.RulesRun))
-	if len(res.NotRun) > 0 {
-		fmt.Fprintf(stdout, ", %d not run:", len(res.NotRun))
-		for _, n := range res.NotRun {
-			fmt.Fprintf(stdout, "\n  %s: %s", n.RuleID, n.Reason)
-		}
-	}
-	fmt.Fprintln(stdout)
-	return ExitOK
-}
-
-func loadConfig(path string) (*config.Config, error) {
-	if path == "" {
-		return config.LoadDefault(".")
-	}
-	return config.Load(path)
 }

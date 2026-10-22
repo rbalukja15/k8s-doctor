@@ -62,6 +62,15 @@ func NewEngine(reg *Registry, cfg *config.Config) (*Engine, error) {
 	return e, nil
 }
 
+// Severity returns the effective severity of a rule: the config override
+// if there is one, otherwise the rule's default.
+func (e *Engine) Severity(r Rule) Severity {
+	if o, ok := e.overrides[r.ID()]; ok {
+		return o
+	}
+	return r.Severity()
+}
+
 // Run evaluates every applicable rule against s. Running twice on the same
 // snapshot yields identical results, including finding IDs and order.
 func (e *Engine) Run(s *snapshot.Snapshot) Result {
@@ -86,10 +95,7 @@ func (e *Engine) Run(s *snapshot.Snapshot) Result {
 			continue
 		}
 		res.RulesRun = append(res.RulesRun, id)
-		sev := rule.Severity()
-		if o, ok := e.overrides[id]; ok {
-			sev = o
-		}
+		sev := e.Severity(rule)
 		for _, f := range findings {
 			f.RuleID = id
 			f.Severity = sev

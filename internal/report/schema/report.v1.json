@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rbalukja15/k8s-doctor/report.v1.json",
+  "title": "k8s-doctor report",
+  "description": "Output of `k8s-doctor check --format json`. Terminal output, the HTML report and the eval harness are all built from this document.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "tool", "generatedAt", "input", "summary", "findings", "groups", "rules"],
+  "properties": {
+    "schemaVersion": { "const": "v1" },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "const": "k8s-doctor" },
+        "version": { "type": "string", "minLength": 1 }
+      }
+    },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "llm"],
+      "properties": {
+        "mode": { "$ref": "#/$defs/mode" },
+        "cluster": { "type": "string" },
+        "path": { "type": "string" },
+        "overlay": { "type": "string" },
+        "llm": { "type": "boolean" }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total", "bySeverity", "rulesRun", "rulesNotRun"],
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "bySeverity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["critical", "high", "medium", "low"],
+          "properties": {
+            "critical": { "type": "integer", "minimum": 0 },
+            "high": { "type": "integer", "minimum": 0 },
+            "medium": { "type": "integer", "minimum": 0 },
+            "low": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "worst": { "$ref": "#/$defs/severity" },
+        "rulesRun": { "type": "integer", "minimum": 0 },
+        "rulesNotRun": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } },
+    "groups": { "type": "array", "items": { "$ref": "#/$defs/group" } },
+    "rules": { "type": "array", "items": { "$ref": "#/$defs/rule" } }
+  },
+  "$defs": {
+    "mode": { "enum": ["manifest", "cluster"] },
+    "severity": { "enum": ["critical", "high", "medium", "low"] },
+    "findingId": { "type": "string", "pattern": "^KD-[0-9a-f]{16}$" },
+    "ruleId": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "name"],
+      "properties": {
+        "kind": { "type": "string", "minLength": 1 },
+        "namespace": { "type": "string" },
+        "name": { "type": "string", "minLength": 1 }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "ruleId", "severity", "resource", "fieldPath", "message", "category", "explanation"],
+      "properties": {
+        "id": { "$ref": "#/$defs/findingId" },
+        "ruleId": { "$ref": "#/$defs/ruleId" },
+        "severity": { "$ref": "#/$defs/severity" },
+        "resource": { "$ref": "#/$defs/resource" },
+        "fieldPath": { "type": "string", "minLength": 1 },
+        "message": { "type": "string", "minLength": 1 },
+        "evidence": { "type": "object", "additionalProperties": { "type": "string" } },
+        "category": { "type": "string", "minLength": 1 },
+        "explanation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["text", "source"],
+          "properties": {
+            "text": { "type": "string", "minLength": 1 },
+            "source": { "enum": ["rule", "llm"] }
+          }
+        }
+      }
+    },
+    "group": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "severity", "findingIds"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "severity": { "$ref": "#/$defs/severity" },
+        "findingIds": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/findingId" } },
+        "narrative": { "type": "string" }
+      }
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "category", "severity", "modes", "description", "status"],
+      "properties": {
+        "id": { "$ref": "#/$defs/ruleId" },
+        "category": { "type": "string", "minLength": 1 },
+        "severity": { "$ref": "#/$defs/severity" },
+        "modes": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/mode" } },
+        "description": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["run", "not-run"] },
+        "reason": { "type": "string" }
+      },
+      "if": { "properties": { "status": { "const": "not-run" } } },
+      "then": { "required": ["reason"] }
+    }
+  }
+}

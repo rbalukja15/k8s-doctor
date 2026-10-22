@@ -32,22 +32,24 @@ flowchart LR
 - **Rules find, the LLM explains.** Every finding comes from a deterministic rule with a stable ID. The LLM can only explain findings that exist, which is checked mechanically, and the tool is fully useful with `--no-llm`.
 - **Measured, not eyeballed.** Every rule ships with labeled positive, clean and near-miss fixtures, and detection precision/recall is published from `make eval`.
 
-More detail: [architecture](docs/architecture.md), [rules](docs/rules.md), [ADR-0001: stack and scope](docs/adr/0001-stack-and-scope.md), [ADR-0002: snapshot and read-only guarantees](docs/adr/0002-collector-and-snapshot.md).
+More detail: [architecture](docs/architecture.md), [CLI and JSON report](docs/cli.md), [rules](docs/rules.md), [ADR-0001: stack and scope](docs/adr/0001-stack-and-scope.md), [ADR-0002: snapshot and read-only guarantees](docs/adr/0002-collector-and-snapshot.md).
 
 ## Tech stack
 
 Go, because the libraries this needs are Go libraries that can be called in-process: client-go for read-only cluster access, kustomize's `krusty` API for overlays, and kubeconform for validating patches. It ships as a single static binary. The full rationale is in [ADR-0001](docs/adr/0001-stack-and-scope.md).
 
-## Status
+## Usage
 
-Early development. What works today:
+Early development: the rule engine, the first rules and the CLI work today on snapshot files. The cluster (#7) and manifest (#8) collectors are next.
 
 ```console
-$ go run ./cmd/k8s-doctor rules
-$ go run ./cmd/k8s-doctor check --snapshot fixtures/image-tag-mutable/positive/snapshot.json
+$ go build -o bin/k8s-doctor ./cmd/k8s-doctor      # or: make build
+$ bin/k8s-doctor rules
+$ bin/k8s-doctor --snapshot fixtures/image-tag-mutable/positive/snapshot.json --explain
+$ bin/k8s-doctor --snapshot fixtures/image-tag-mutable/positive/snapshot.json --format json
 ```
 
-Full run instructions for clusters and manifest folders come with the CLI (#20).
+Findings print most severe first, and the exit code says how bad the worst one is (`--fail-on` sets the threshold, default `high`), so the tool can gate a CI job. See [docs/cli.md](docs/cli.md) for every flag, the exit codes and the JSON report schema.
 
 ## Development
 

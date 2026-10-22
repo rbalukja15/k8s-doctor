@@ -2,6 +2,12 @@
 
 Short notes on what was built and what was learned, newest first.
 
+## 2026-10-22: CLI and JSON report
+
+- Versioned JSON report (`v1`) with a JSON Schema that every fixture's report is validated against in tests. Terminal output and, later, HTML and eval all render from it.
+- Exit codes 10–13 encode the worst severity at or above `--fail-on`, kept apart from 1 (error) and 2 (usage) so CI can tell a broken run from a failing one.
+- `--enable-rule`/`--disable-rule` layer over the config file; naming one rule in both is an error rather than a silent precedence rule.
+
 ## 2026-10-21: Foundations
 
 - Scaffolded the Go module, Makefile, lint (golangci-lint v2 with gofumpt/goimports), pre-commit hooks and CI.
