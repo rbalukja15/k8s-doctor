@@ -40,11 +40,12 @@ Go, because the libraries this needs are Go libraries that can be called in-proc
 
 ## Usage
 
-Early development: the rule engine, the first rules and the CLI work today on manifest folders, kustomize overlays and snapshot files. The read-only cluster collector (#7) is next.
+Early development: the rule engine, the first rules and the CLI work today on live clusters (read-only), manifest folders, kustomize overlays and snapshot files.
 
 ```console
 $ go build -o bin/k8s-doctor ./cmd/k8s-doctor      # or: make build
 $ bin/k8s-doctor rules
+$ bin/k8s-doctor --cluster                               # current kubeconfig context, read-only
 $ bin/k8s-doctor --manifests path/to/overlays/prod       # kustomize overlay, built in-process
 $ bin/k8s-doctor --manifests path/to/manifests/          # plain YAML/JSON manifests
 $ bin/k8s-doctor --snapshot fixtures/image-tag-mutable/positive/snapshot.json --explain
@@ -61,6 +62,7 @@ $ make test        # unit tests + the fixture suite
 $ make lint        # golangci-lint, including gofumpt/goimports
 $ make tools       # pinned kustomize and kubeconform into ./bin
 $ make schemas     # Kubernetes JSON schemas for offline validation
+$ make test-kind   # cluster collector against kind, as a read-only ServiceAccount
 ```
 
 Install the hooks with `pre-commit install`. See [fixtures/README.md](fixtures/README.md) for adding rule fixtures.
