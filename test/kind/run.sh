@@ -8,13 +8,18 @@
 # Secret, ConfigMap or env values.
 #
 # Usage: test/kind/run.sh   (or: make test-kind)
-# Env:   KIND, KUBECTL, K8S_DOCTOR (binaries), KIND_CLUSTER, KEEP_CLUSTER=1
+# It also applies internal/collector/testdata/crossmode and runs the
+# cross-mode test (#9): the spec collected from the cluster must match the
+# spec built from those manifests.
+#
+# Env:   KIND, KUBECTL, K8S_DOCTOR, GO (binaries), KIND_CLUSTER, KEEP_CLUSTER=1
 set -euo pipefail
 
 cd "$(dirname "$0")/../.."
 KIND=${KIND:-kind}
 KUBECTL=${KUBECTL:-kubectl}
 K8S_DOCTOR=${K8S_DOCTOR:-bin/k8s-doctor}
+GO=${GO:-go}
 CLUSTER=${KIND_CLUSTER:-k8s-doctor-test}
 CTX="kind-${CLUSTER}"
 WORK=$(mktemp -d)
@@ -38,6 +43,7 @@ fi
 
 "$KUBECTL" --context "$CTX" apply -f deploy/rbac/readonly-clusterrole.yaml >/dev/null
 "$KUBECTL" --context "$CTX" apply -f test/kind/workloads.yaml >/dev/null
+"$KUBECTL" --context "$CTX" apply -f internal/collector/testdata/crossmode >/dev/null
 # Let the Deployment create its ReplicaSet and pod so runtime data exists.
 for _ in $(seq 1 30); do
   [[ -n $("$KUBECTL" --context "$CTX" -n shop get pods -l app=api -o name 2>/dev/null) ]] && break
@@ -86,6 +92,11 @@ for leak in kind-test-secret-value-do-not-leak kind-test-configmap-value kind-te
   if grep -q "$leak" "$WORK/snapshot.json"; then fail "snapshot contains $leak"; fi
 done
 pass "no Secret, ConfigMap or env values in the snapshot"
+
+# Cross-mode: cluster spec equals manifest spec, as the read-only identity.
+K8S_DOCTOR_KIND_KUBECONFIG="$WORK/kubeconfig" "$GO" test -count=1 -run 'TestCrossModeKind$' -v ./internal/collector \
+  || fail "cluster and manifest modes disagree on spec"
+pass "cluster and manifest modes agree on spec"
 
 # The full check runs too; exit codes 10-13 just mean findings.
 set +e

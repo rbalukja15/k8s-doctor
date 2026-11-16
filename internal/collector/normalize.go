@@ -91,7 +91,9 @@ func podSpec(p *corev1.PodSpec) snapshot.PodSpec {
 		HostIPC:            p.HostIPC,
 		Containers:         make([]snapshot.Container, 0, len(p.Containers)),
 	}
-	if sc := p.SecurityContext; sc != nil {
+	// The API server defaults an absent pod securityContext to {}, so an
+	// empty one is recorded as absent to keep both modes identical.
+	if sc := p.SecurityContext; sc != nil && (sc.RunAsNonRoot != nil || sc.RunAsUser != nil || sc.SeccompProfile != nil) {
 		out.SecurityContext = &snapshot.PodSecurityContext{RunAsNonRoot: sc.RunAsNonRoot, RunAsUser: sc.RunAsUser}
 		if sc.SeccompProfile != nil {
 			out.SecurityContext.SeccompProfile = &snapshot.SeccompProfile{Type: string(sc.SeccompProfile.Type)}
