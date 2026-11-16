@@ -112,11 +112,17 @@ func comparableSpec(in snapshot.Spec, cluster bool) snapshot.Spec {
 			w.Replicas = &one
 		}
 		if w.Kind == snapshot.KindJob {
-			// The Job controller labels its template and generates the selector.
+			// The Job controller labels its template and generates the
+			// selector, and a Job without labels gets its template's labels.
 			for _, k := range []string{"controller-uid", "job-name", "batch.kubernetes.io/controller-uid", "batch.kubernetes.io/job-name"} {
+				delete(w.Labels, k)
 				delete(w.Selector, k)
 				delete(w.Template.Labels, k)
 			}
+			if len(w.Labels) == 0 {
+				w.Labels = w.Template.Labels
+			}
+			w.Labels = nilIfEmpty(w.Labels)
 			w.Selector = nilIfEmpty(w.Selector)
 			w.Template.Labels = nilIfEmpty(w.Template.Labels)
 		}

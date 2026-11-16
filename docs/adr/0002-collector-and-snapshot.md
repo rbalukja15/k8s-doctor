@@ -82,7 +82,7 @@ Both collectors fill `spec` with the same normalization, so a workload applied t
 - Service `type` (`ClusterIP`) and `targetPort` (defaults to `port`)
 - namespace (`default`) when the manifest has none and no overlay sets one
 - HPA `minReplicas` (1)
-- the Job controller's labels on a Job's selector and pod template (`batch.kubernetes.io/controller-uid`, `batch.kubernetes.io/job-name` and their legacy unprefixed forms)
+- the Job controller's labels on a Job's selector and pod template (`batch.kubernetes.io/controller-uid`, `batch.kubernetes.io/job-name` and their legacy unprefixed forms); a Job with no labels of its own also gets its template's labels
 - the `kubernetes.io/metadata.name` label on every Namespace, and the `kube-root-ca.crt` ConfigMap in every namespace
 - Secret and ConfigMap key names and Secret `type`, which cluster mode never reads
 
