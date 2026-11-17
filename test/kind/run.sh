@@ -50,18 +50,22 @@ for _ in $(seq 1 30); do
   sleep 2
 done
 
-# A kubeconfig that authenticates as the read-only ServiceAccount.
+# A kubeconfig that authenticates as a ServiceAccount: sa_kubeconfig NS NAME OUT
 server=$("$KUBECTL" config view --raw --minify --context "$CTX" -o jsonpath='{.clusters[0].cluster.server}')
 ca=$("$KUBECTL" config view --raw --minify --context "$CTX" -o jsonpath='{.clusters[0].cluster.certificate-authority-data}')
-token=$("$KUBECTL" --context "$CTX" -n k8s-doctor create token k8s-doctor --duration=10m)
-cat >"$WORK/kubeconfig" <<KCFG
+sa_kubeconfig() {
+  local token
+  token=$("$KUBECTL" --context "$CTX" -n "$1" create token "$2" --duration=10m)
+  cat >"$3" <<KCFG
 apiVersion: v1
 kind: Config
 clusters: [{name: kind, cluster: {server: "$server", certificate-authority-data: "$ca"}}]
-users: [{name: k8s-doctor, user: {token: "$token"}}]
-contexts: [{name: k8s-doctor-readonly, context: {cluster: kind, user: k8s-doctor}}]
+users: [{name: $2, user: {token: "$token"}}]
+contexts: [{name: k8s-doctor-readonly, context: {cluster: kind, user: $2}}]
 current-context: k8s-doctor-readonly
 KCFG
+}
+sa_kubeconfig k8s-doctor k8s-doctor "$WORK/kubeconfig"
 SA=(--kubeconfig "$WORK/kubeconfig")
 
 # The identity really is read-only.
@@ -69,6 +73,10 @@ for verb in create update patch delete; do
   [[ $("$KUBECTL" "${SA[@]}" auth can-i "$verb" deployments -A) == no ]] || fail "ServiceAccount can $verb deployments"
 done
 [[ $("$KUBECTL" "${SA[@]}" auth can-i list pods -A) == yes ]] || fail "ServiceAccount cannot list pods"
+for check in "get secrets" "watch pods"; do
+  # shellcheck disable=SC2086
+  [[ $("$KUBECTL" "${SA[@]}" auth can-i $check -A) == no ]] || fail "ServiceAccount can $check"
+done
 pass "ServiceAccount has read verbs only"
 
 # Collect under that identity. Any RBAC denial fails the run.
@@ -88,10 +96,27 @@ jq -e '[.runtime.pods[] | select(.owner.kind == "Deployment" and .owner.name == 
   || fail "api pod not attributed to its Deployment"
 pass "snapshot contains the expected workloads, secrets by name, and pod ownership"
 
-for leak in kind-test-secret-value-do-not-leak kind-test-configmap-value kind-test-env-value; do
+for leak in kind-test-secret-value-do-not-leak kind-test-configmap-value kind-test-env-value \
+  crossmode-secret-value crossmode-configmap-value crossmode-env-value; do
   if grep -q "$leak" "$WORK/snapshot.json"; then fail "snapshot contains $leak"; fi
 done
 pass "no Secret, ConfigMap or env values in the snapshot"
+
+
+# The namespaced Role: one namespace, no Secret access at all.
+sed 's/my-app/shop/g' deploy/rbac/readonly-role-namespaced.yaml | "$KUBECTL" --context "$CTX" apply -f - >/dev/null
+sa_kubeconfig shop k8s-doctor "$WORK/kubeconfig-ns"
+NS=(--kubeconfig "$WORK/kubeconfig-ns")
+for check in "list secrets" "get secrets"; do
+  # shellcheck disable=SC2086
+  [[ $("$KUBECTL" "${NS[@]}" -n shop auth can-i $check) == no ]] || fail "namespaced ServiceAccount can $check"
+done
+[[ $("$KUBECTL" "${NS[@]}" auth can-i list pods -A) == no ]] || fail "namespaced ServiceAccount can list pods cluster-wide"
+"$K8S_DOCTOR" snapshot --cluster "${NS[@]}" --namespace shop --skip-secrets >"$WORK/snapshot-ns.json" 2>"$WORK/stderr" \
+  || { cat "$WORK/stderr" >&2; fail "snapshot with the namespaced Role failed"; }
+jq -e '([.spec.workloads[] | "\(.kind)/\(.namespace)/\(.name)"] | index("Deployment/shop/api") != null) and (.spec.secrets == null)' "$WORK/snapshot-ns.json" >/dev/null \
+  || fail "namespaced snapshot is missing workloads or has secrets"
+pass "collected one namespace with the namespaced Role and --skip-secrets"
 
 # Cross-mode: cluster spec equals manifest spec, as the read-only identity.
 K8S_DOCTOR_KIND_KUBECONFIG="$WORK/kubeconfig" "$GO" test -count=1 -run 'TestCrossModeKind$' -v ./internal/collector \

@@ -17,10 +17,12 @@ Exactly one of `--cluster`, `--manifests` and `--snapshot` is required. `k8s-doc
 
 ### Cluster mode
 
-- Read-only: the collector only issues `get` and `list` requests. [`deploy/rbac/readonly-clusterrole.yaml`](../deploy/rbac/readonly-clusterrole.yaml) is the minimal ClusterRole, plus a ServiceAccount and binding to run it under.
-- Every namespace is read except `kube-system`, `kube-public`, `kube-node-lease` and `local-path-storage`. Name namespaces with `--namespace` to narrow it, or to include a system namespace explicitly.
-- Secrets and ConfigMaps are listed through the metadata API, so their values are never sent to k8s-doctor. In cluster mode the snapshot records their names only, not their key names.
-- Pods, container statuses and Events go into `runtime`. Each Pod is attributed to its top-level workload (ReplicaSet to Deployment, Job to CronJob). Jobs created by a CronJob are folded into the CronJob rather than listed as workloads.
+- Read-only: the collector only issues `get` (on namespaces) and `list` requests. [`deploy/rbac/readonly-clusterrole.yaml`](../deploy/rbac/readonly-clusterrole.yaml) is the minimal ClusterRole, plus a ServiceAccount and binding to run it under. For a single namespace, [`deploy/rbac/readonly-role-namespaced.yaml`](../deploy/rbac/readonly-role-namespaced.yaml) is a Role with no Secret access, used with `--namespace <ns> --skip-secrets`.
+- Without `--namespace`, each kind is listed once across the cluster and system namespaces (`kube-system`, `kube-public`, `kube-node-lease`, `local-path-storage`) are dropped. Name namespaces with `--namespace` to narrow it, or to include a system namespace explicitly. Lists are paged, 500 objects at a time.
+- Any refused or failed request fails the run, naming the resource and, for a 403, the missing grant. A partial snapshot would let rules pass on data they never saw.
+- Secrets and ConfigMaps are listed through the metadata API, so their values are never sent to k8s-doctor. In cluster mode the snapshot records their names only, not their key names. `--skip-secrets` leaves Secrets out entirely.
+- `list` on Secrets cluster-wide is a sensitive grant even though k8s-doctor only reads metadata: anything using the same identity could read the values. Bind the ClusterRole only to k8s-doctor, or use `--skip-secrets` and drop the `secrets` entry.
+- Pods, container statuses (init containers included, marked `init`) and Events go into `runtime`. Event messages are kept as controllers wrote them and can include names, URLs or other text you may not want to share; the snapshot's `source.cluster` is your kubeconfig context name. Review a snapshot before sharing it. Each Pod is attributed to its top-level workload (ReplicaSet to Deployment, Job to CronJob). Jobs created by a CronJob are folded into the CronJob rather than listed as workloads.
 
 ### Manifests mode
 
@@ -40,6 +42,7 @@ Exactly one of `--cluster`, `--manifests` and `--snapshot` is required. `k8s-doc
 | `--kubeconfig <file>` | `$KUBECONFIG` or `~/.kube/config` | Kubeconfig for `--cluster`. |
 | `--context <name>` | current context | Kubeconfig context for `--cluster`. |
 | `--namespace <ns>` | all but system namespaces | Namespaces for `--cluster`, repeatable or comma-separated. |
+| `--skip-secrets` | off | With `--cluster`, do not list Secrets, so the identity needs no access to them. |
 | `--timeout` | `2m` | Time limit for collecting from the cluster. |
 | `--manifests <dir>` | | Analyze a folder of plain manifests, or a kustomize overlay built in-process. |
 | `--config <file>` | `./.k8s-doctor.yaml` if present | Rule toggles and severity overrides ([rules](rules.md#configuring-rules)). |

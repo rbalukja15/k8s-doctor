@@ -2,7 +2,9 @@ package collector_test
 
 import (
 	"context"
+	"maps"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -59,7 +61,9 @@ func fakeClients(t *testing.T) (*collector.Clients, *fake.Clientset) {
 		&corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{Namespace: "shop", Name: "api-7d9f-x2k9p", OwnerReferences: ownedBy("ReplicaSet", "api-7d9f")},
 			Spec:       corev1.PodSpec{NodeName: "worker-1"},
-			Status: corev1.PodStatus{Phase: corev1.PodRunning, ContainerStatuses: []corev1.ContainerStatus{{
+			Status: corev1.PodStatus{Phase: corev1.PodRunning, InitContainerStatuses: []corev1.ContainerStatus{{
+				Name: "migrate", State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{Reason: "Completed"}},
+			}}, ContainerStatuses: []corev1.ContainerStatus{{
 				Name: "api", RestartCount: 7,
 				State:                corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}},
 				LastTerminationState: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{Reason: "OOMKilled", ExitCode: 137, FinishedAt: finished}},
@@ -113,8 +117,11 @@ func TestCluster(t *testing.T) {
 	if owners["api-7d9f-x2k9p"] != "Deployment/shop/api" || owners["nightly-2900-abcde"] != "CronJob/shop/nightly" {
 		t.Errorf("pod owners not resolved to top-level workloads: %v", owners)
 	}
-	cs := s.Runtime.Pods[0].Containers[0]
-	if cs.RestartCount != 7 || cs.Reason != "CrashLoopBackOff" || cs.LastTermination == nil || cs.LastTermination.Reason != "OOMKilled" {
+	if init := s.Runtime.Pods[0].Containers[0]; !init.Init || init.Name != "migrate" || init.Reason != "Completed" {
+		t.Errorf("init container status = %+v", init)
+	}
+	cs := s.Runtime.Pods[0].Containers[1]
+	if cs.Init || cs.RestartCount != 7 || cs.Reason != "CrashLoopBackOff" || cs.LastTermination == nil || cs.LastTermination.Reason != "OOMKilled" {
 		t.Errorf("container status = %+v", cs)
 	}
 	if len(s.Runtime.Events) != 1 || s.Runtime.Events[0].Count != 12 || s.Runtime.Events[0].LastSeen.IsZero() {
@@ -129,11 +136,26 @@ func TestCluster(t *testing.T) {
 		t.Error("an env literal reached the snapshot")
 	}
 
-	// The collector must only ever read.
+	// The collector must only use the verbs RequiredResources declares.
+	allowed := map[string][]string{}
+	for _, r := range collector.RequiredResources {
+		allowed[r.Resource] = r.Verbs
+	}
 	for _, a := range typed.Actions() {
-		if v := a.GetVerb(); v != "list" && v != "get" {
-			t.Errorf("collector issued a %q request on %s", v, a.GetResource().Resource)
+		if res := a.GetResource().Resource; !slices.Contains(allowed[res], a.GetVerb()) {
+			t.Errorf("collector issued a %q request on %s", a.GetVerb(), res)
 		}
+	}
+}
+
+func TestClusterSkipSecrets(t *testing.T) {
+	c, _ := fakeClients(t)
+	s, err := collector.Cluster(context.Background(), c, collector.ClusterOptions{SkipSecrets: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(s.Spec.Secrets) != 0 || len(s.Spec.ConfigMaps) != 1 {
+		t.Errorf("secrets/configmaps = %+v / %+v", s.Spec.Secrets, s.Spec.ConfigMaps)
 	}
 }
 
@@ -151,49 +173,73 @@ func TestClusterNamespaceFilter(t *testing.T) {
 	}
 }
 
-// TestReadOnlyClusterRole keeps deploy/rbac in sync with the collector: the
-// ClusterRole grants only get/list/watch, and covers every resource read.
-func TestReadOnlyClusterRole(t *testing.T) {
-	data, err := os.ReadFile("../../deploy/rbac/readonly-clusterrole.yaml")
+// TestReadOnlyRBAC keeps deploy/rbac in sync with the collector: each role
+// grants exactly the verbs the collector uses on exactly the resources it
+// reads, with no wildcards.
+func TestReadOnlyRBAC(t *testing.T) {
+	want := map[string][]string{}
+	for _, r := range collector.RequiredResources {
+		want[r.Group+"/"+r.Resource] = r.Verbs
+	}
+	t.Run("ClusterRole", func(t *testing.T) {
+		assertRules(t, loadRules(t, "readonly-clusterrole.yaml", "ClusterRole"), want)
+	})
+	t.Run("namespaced Role", func(t *testing.T) {
+		// --namespace --skip-secrets: no Secrets, and the namespace is read
+		// with get only.
+		ns := maps.Clone(want)
+		delete(ns, "/secrets")
+		ns["/namespaces"] = []string{"get"}
+		assertRules(t, loadRules(t, "readonly-role-namespaced.yaml", "Role"), ns)
+	})
+}
+
+func loadRules(t *testing.T, file, kind string) []rbacv1.PolicyRule {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("../../deploy/rbac", file))
 	if err != nil {
 		t.Fatal(err)
 	}
-	var role *rbacv1.ClusterRole
 	for _, doc := range strings.Split(string(data), "\n---\n") {
-		var r rbacv1.ClusterRole
+		var r struct {
+			Kind  string              `json:"kind"`
+			Rules []rbacv1.PolicyRule `json:"rules"`
+		}
 		if err := yaml.Unmarshal([]byte(doc), &r); err != nil {
 			t.Fatal(err)
 		}
-		if r.Kind == "ClusterRole" {
-			role = &r
+		if r.Kind == kind {
+			return r.Rules
 		}
 	}
-	if role == nil {
-		t.Fatal("no ClusterRole in deploy/rbac/readonly-clusterrole.yaml")
-	}
-	granted := map[collector.ReadOnlyResource]bool{}
-	for _, rule := range role.Rules {
-		for _, v := range rule.Verbs {
-			if v != "get" && v != "list" && v != "watch" {
-				t.Errorf("ClusterRole grants write verb %q", v)
-			}
-		}
+	t.Fatalf("no %s in %s", kind, file)
+	return nil
+}
+
+func assertRules(t *testing.T, rules []rbacv1.PolicyRule, want map[string][]string) {
+	t.Helper()
+	got := map[string][]string{}
+	for _, rule := range rules {
 		for _, g := range rule.APIGroups {
 			for _, r := range rule.Resources {
-				if g == "*" || r == "*" {
-					t.Errorf("ClusterRole uses a wildcard (%q/%q)", g, r)
+				if g == "*" || r == "*" || slices.Contains(rule.Verbs, "*") {
+					t.Errorf("wildcard in rule %+v", rule)
 				}
-				granted[collector.ReadOnlyResource{Group: g, Resource: r}] = true
+				got[g+"/"+r] = append(got[g+"/"+r], rule.Verbs...)
 			}
 		}
 	}
-	for _, r := range collector.RequiredResources {
-		if !granted[r] {
-			t.Errorf("collector reads %s/%s but the ClusterRole does not grant it", r.Group, r.Resource)
+	for k, verbs := range got {
+		slices.Sort(verbs)
+		w := slices.Clone(want[k])
+		slices.Sort(w)
+		if !slices.Equal(verbs, w) {
+			t.Errorf("%s: role grants %v, collector uses %v", k, verbs, w)
 		}
-		delete(granted, r)
 	}
-	for r := range granted {
-		t.Errorf("ClusterRole grants %s/%s, which the collector never reads", r.Group, r.Resource)
+	for k := range want {
+		if _, ok := got[k]; !ok {
+			t.Errorf("%s: collector reads it but the role does not grant it", k)
+		}
 	}
 }

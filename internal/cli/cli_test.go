@@ -135,6 +135,7 @@ func TestInputAndFlagErrors(t *testing.T) {
 		{"two inputs", []string{"check", "--snapshot", clean, "--cluster"}, cli.ExitUsage, "exactly one of"},
 		{"cluster bad kubeconfig", []string{"check", "--cluster", "--kubeconfig", "no-such-kubeconfig"}, cli.ExitError, "kubeconfig"},
 		{"cluster flags without --cluster", []string{"check", "--snapshot", clean, "--namespace", "shop"}, cli.ExitUsage, "only apply to --cluster"},
+		{"skip-secrets without --cluster", []string{"check", "--manifests", "testdata", "--skip-secrets"}, cli.ExitUsage, "only apply to --cluster"},
 		{"manifests missing dir", []string{"check", "--manifests", "no-such-dir"}, cli.ExitError, "no-such-dir"},
 		{"missing file", []string{"check", "--snapshot", "nope.json"}, cli.ExitError, "nope.json"},
 		{"bad format", []string{"check", "--snapshot", clean, "--format", "yaml"}, cli.ExitUsage, "--format"},

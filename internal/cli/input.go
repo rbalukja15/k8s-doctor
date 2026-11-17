@@ -17,6 +17,7 @@ type inputOptions struct {
 	kubeconfig   string
 	kubeContext  string
 	namespaces   listFlag
+	skipSecrets  bool
 	timeout      time.Duration
 	manifests    string
 	// allowSnapshot is false for the snapshot command, whose output a
@@ -33,6 +34,7 @@ func (i *inputOptions) register(fs *flag.FlagSet, allowSnapshot bool) {
 	fs.StringVar(&i.kubeconfig, "kubeconfig", "", "kubeconfig for --cluster (default $KUBECONFIG or ~/.kube/config)")
 	fs.StringVar(&i.kubeContext, "context", "", "kubeconfig context for --cluster (default: current context)")
 	fs.Var(&i.namespaces, "namespace", "namespaces for --cluster (repeatable, comma-separated; default all but system namespaces)")
+	fs.BoolVar(&i.skipSecrets, "skip-secrets", false, "with --cluster, do not list Secrets, so the identity needs no access to them")
 	fs.DurationVar(&i.timeout, "timeout", 2*time.Minute, "time limit for collecting from the cluster")
 	fs.StringVar(&i.manifests, "manifests", "", "read a folder of plain manifests, or a kustomize overlay built in-process")
 }
@@ -50,12 +52,12 @@ func (i *inputOptions) load() (*snapshot.Snapshot, error) {
 		}
 		return nil, fmt.Errorf("%w: exactly one of --cluster or --manifests is required", errUsage)
 	}
-	if !i.cluster && (i.kubeconfig != "" || i.kubeContext != "" || len(i.namespaces) > 0) {
-		return nil, fmt.Errorf("%w: --kubeconfig, --context and --namespace only apply to --cluster", errUsage)
+	if !i.cluster && (i.kubeconfig != "" || i.kubeContext != "" || len(i.namespaces) > 0 || i.skipSecrets) {
+		return nil, fmt.Errorf("%w: --kubeconfig, --context, --namespace and --skip-secrets only apply to --cluster", errUsage)
 	}
 	switch {
 	case i.cluster:
-		opts := collector.ClusterOptions{Kubeconfig: i.kubeconfig, Context: i.kubeContext, Namespaces: i.namespaces}
+		opts := collector.ClusterOptions{Kubeconfig: i.kubeconfig, Context: i.kubeContext, Namespaces: i.namespaces, SkipSecrets: i.skipSecrets}
 		clients, err := collector.NewClients(opts)
 		if err != nil {
 			return nil, err
