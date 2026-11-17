@@ -28,7 +28,7 @@ flowchart LR
     P --> O
 ```
 
-- **Read-only, always.** The cluster collector only gets, lists and watches. Secret values are never read. Patches are files or diffs; nothing is applied.
+- **Read-only, always.** The cluster collector only gets and lists. Secret values are never read. Patches are files or diffs; nothing is applied.
 - **Rules find, the LLM explains.** Every finding comes from a deterministic rule with a stable ID. The LLM can only explain findings that exist, which is checked mechanically, and the tool is fully useful with `--no-llm`.
 - **Measured, not eyeballed.** Every rule ships with labeled positive, clean and near-miss fixtures, and detection precision/recall is published from `make eval`.
 

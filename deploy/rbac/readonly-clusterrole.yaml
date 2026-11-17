@@ -1,11 +1,14 @@
 # Read-only access for `k8s-doctor --cluster`.
 #
-# Only get, list and watch, on exactly the resources the collector reads
+# Only the verbs the collector uses, on exactly the resources it reads
 # (internal/collector/cluster.go RequiredResources; a test keeps the two in
-# sync). Secrets and ConfigMaps need list because the collector lists them
-# through the metadata API: it requests PartialObjectMetadata, so values are
-# never sent. Note that list on secrets would still let this identity read
-# values with another client, so bind it only to k8s-doctor.
+# sync): get and list on namespaces, list on everything else. No watch, and
+# no get on Secrets, so Secrets cannot be fetched by name. Secrets and
+# ConfigMaps are listed through the metadata API, which never sends values,
+# but list on secrets would still let this identity read values with another
+# client, so bind it only to k8s-doctor. To avoid that grant, drop the
+# secrets entry and run with --skip-secrets. For one namespace, use
+# readonly-role-namespaced.yaml instead.
 #
 #   kubectl apply -f deploy/rbac/readonly-clusterrole.yaml
 apiVersion: v1
@@ -25,20 +28,23 @@ metadata:
   name: k8s-doctor-readonly
 rules:
   - apiGroups: [""]
-    resources: [namespaces, pods, services, events, configmaps, secrets]
-    verbs: [get, list, watch]
+    resources: [namespaces]
+    verbs: [get, list]
+  - apiGroups: [""]
+    resources: [pods, services, events, configmaps, secrets]
+    verbs: [list]
   - apiGroups: [apps]
     resources: [deployments, statefulsets, daemonsets, replicasets]
-    verbs: [get, list, watch]
+    verbs: [list]
   - apiGroups: [batch]
     resources: [jobs, cronjobs]
-    verbs: [get, list, watch]
+    verbs: [list]
   - apiGroups: [policy]
     resources: [poddisruptionbudgets]
-    verbs: [get, list, watch]
+    verbs: [list]
   - apiGroups: [autoscaling]
     resources: [horizontalpodautoscalers]
-    verbs: [get, list, watch]
+    verbs: [list]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

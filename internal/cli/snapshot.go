@@ -10,8 +10,11 @@ import (
 const snapshotUsage = `Usage: k8s-doctor snapshot (--cluster | --manifests <dir>) [flags]
 
 Collect a snapshot and print it as JSON, without running any rules. Use it
-to inspect exactly what k8s-doctor sees, to attach to a bug report (it never
-contains Secret values), or as input to "check --snapshot" and fixtures.
+to inspect exactly what k8s-doctor sees, or as input to "check --snapshot"
+and fixtures. It never contains Secret or ConfigMap values or env literals,
+but in cluster mode it does contain Event messages as written by controllers,
+object names and labels, and the kubeconfig context name. Review it before
+sharing it outside your organization.
 
 Flags:
 `

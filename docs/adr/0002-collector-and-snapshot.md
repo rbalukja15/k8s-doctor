@@ -63,13 +63,16 @@ The cluster collector needs exactly this, shipped as `deploy/rbac/readonly-clust
 
 | API group | Resources | Verbs |
 |---|---|---|
-| `""` | namespaces, pods, services, events, configmaps, secrets | get, list, watch |
-| `apps` | deployments, statefulsets, daemonsets, replicasets | get, list, watch |
-| `batch` | jobs, cronjobs | get, list, watch |
-| `policy` | poddisruptionbudgets | get, list, watch |
-| `autoscaling` | horizontalpodautoscalers | get, list, watch |
+| `""` | namespaces | get, list |
+| `""` | pods, services, events, configmaps, secrets | list |
+| `apps` | deployments, statefulsets, daemonsets, replicasets | list |
+| `batch` | jobs, cronjobs | list |
+| `policy` | poddisruptionbudgets | list |
+| `autoscaling` | horizontalpodautoscalers | list |
 
-`secrets` and `configmaps` are listed because metadata-only reads still need `list`; the collector never requests their bodies. System namespaces (`kube-system`, `kube-public`, `kube-node-lease`, `local-path-storage`) are skipped unless named with `--namespace`. The #7 test (`make test-kind`, a CI job) runs the collector in kind under a ServiceAccount bound only to this role, which proves no write verb is needed.
+There is no `watch` (the collector takes one snapshot) and no `get` on Secrets, so the identity cannot fetch a Secret by name. `deploy/rbac/readonly-role-namespaced.yaml` is the single-namespace variant for `--namespace <ns> --skip-secrets`, with no Secret access at all.
+
+`secrets` and `configmaps` are listed because metadata-only reads still need `list`; the collector never requests their bodies. System namespaces (`kube-system`, `kube-public`, `kube-node-lease`, `local-path-storage`) are skipped unless named with `--namespace`. The #7 test (`make test-kind`, a CI job) runs the collector in kind under a ServiceAccount bound only to this role, and again under one bound only to the namespaced Role, which proves nothing more is needed.
 
 ### How the two modes converge
 
