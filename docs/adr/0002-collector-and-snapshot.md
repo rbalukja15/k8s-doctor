@@ -89,7 +89,7 @@ Both collectors fill `spec` with the same normalization, so a workload applied t
 - the `kubernetes.io/metadata.name` label on every Namespace, and the `kube-root-ca.crt` ConfigMap in every namespace
 - Secret and ConfigMap key names and Secret `type`, which cluster mode never reads
 
-An absent pod `securityContext` is defaulted to `{}` by the API server; the shared normalization records an empty one as absent, so it needs no special case. The comparison sets unset fields to their default instead of dropping them, so a manifest that sets a non-default value still shows up as a difference. It lives in `internal/collector/crossmode_test.go` and runs against fake clients in `make test` and against kind in `make test-kind`.
+An absent pod `securityContext` is defaulted to `{}` by the API server; the shared normalization records an empty one as absent, so it needs no special case. The comparison sets unset fields to their default instead of dropping them, so a manifest that sets a non-default value still shows up as a difference. It lives in `internal/collector/crossmode_test.go` and runs against fake clients in `make test` and against kind in `make test-kind`. The fake API server applies no defaults, so the fake run only pins the shared normalization; the kind run (the `Cluster collector (kind)` CI job) is the one that checks this list against a real API server.
 
 Rules must treat an unset field and its server default the same way. For example, the single-replica rule treats an unset `replicas` as 1.
 

@@ -1,9 +1,13 @@
 package collector_test
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -13,6 +17,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/kubernetes/scheme"
 	metadatafake "k8s.io/client-go/metadata/fake"
@@ -120,7 +125,7 @@ func comparableSpec(in snapshot.Spec, cluster bool) snapshot.Spec {
 				delete(w.Template.Labels, k)
 			}
 			if len(w.Labels) == 0 {
-				w.Labels = w.Template.Labels
+				w.Labels = maps.Clone(w.Template.Labels)
 			}
 			w.Labels = nilIfEmpty(w.Labels)
 			w.Selector = nilIfEmpty(w.Selector)
@@ -170,10 +175,14 @@ func comparableSpec(in snapshot.Spec, cluster bool) snapshot.Spec {
 	return s
 }
 
+// defaultContainer fills the server defaults of the container fields the
+// snapshot records. Fields it does not record (successThreshold,
+// terminationMessagePath, ...) need none, and initialDelaySeconds defaults
+// to 0, which is already how the snapshot leaves it unset.
 func defaultContainer(c *snapshot.Container) {
 	if c.ImagePullPolicy == "" {
 		c.ImagePullPolicy = "IfNotPresent"
-		if tag := imageTag(c.Image); tag == "" || tag == "latest" {
+		if pullsAlways(c.Image) {
 			c.ImagePullPolicy = "Always"
 		}
 	}
@@ -198,17 +207,15 @@ func defaultContainer(c *snapshot.Container) {
 	}
 }
 
-// imageTag returns the tag of an image reference, or "" when it has none
-// (digest references count as tagged, as Kubernetes treats them).
-func imageTag(image string) string {
+// pullsAlways reports whether Kubernetes defaults imagePullPolicy to
+// Always for an image: no tag, or :latest. A digest counts as pinned.
+func pullsAlways(image string) bool {
 	if strings.Contains(image, "@") {
-		return "digest"
+		return false
 	}
 	name := image[strings.LastIndex(image, "/")+1:]
-	if i := strings.LastIndex(name, ":"); i >= 0 {
-		return name[i+1:]
-	}
-	return ""
+	i := strings.LastIndex(name, ":")
+	return i < 0 || name[i+1:] == "latest"
 }
 
 func nilIfEmpty(m map[string]string) map[string]string {
@@ -229,15 +236,23 @@ func decodeManifests(t *testing.T, dir string) (typed, meta []runtime.Object) {
 	}
 	decode := scheme.Codecs.UniversalDeserializer().Decode
 	for _, f := range files {
-		data, err := os.ReadFile(f)
+		fh, err := os.Open(f)
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, doc := range strings.Split(string(data), "\n---\n") {
-			if strings.TrimSpace(doc) == "" {
+		docs := k8syaml.NewYAMLReader(bufio.NewReader(fh))
+		for {
+			doc, err := docs.Read()
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			if err != nil {
+				t.Fatalf("%s: %v", f, err)
+			}
+			if len(bytes.TrimSpace(doc)) == 0 {
 				continue
 			}
-			obj, gvk, err := decode([]byte(doc), nil, nil)
+			obj, gvk, err := decode(doc, nil, nil)
 			if err != nil {
 				t.Fatalf("%s: %v", f, err)
 			}
@@ -251,6 +266,7 @@ func decodeManifests(t *testing.T, dir string) (typed, meta []runtime.Object) {
 			}
 			typed = append(typed, obj)
 		}
+		_ = fh.Close()
 	}
 	return typed, meta
 }
