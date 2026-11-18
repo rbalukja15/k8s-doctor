@@ -135,6 +135,9 @@ func newClients(cfg *rest.Config, name string) (*Clients, error) {
 // turn. Any failed request fails the run: a partial snapshot would make
 // rules pass on data they never saw.
 func Cluster(ctx context.Context, c *Clients, opts ClusterOptions) (*snapshot.Snapshot, error) {
+	// A namespace named twice would be collected twice and fail the
+	// duplicate check with a misleading error.
+	opts.Namespaces = slices.Compact(slices.Sorted(slices.Values(opts.Namespaces)))
 	namespaces, err := selectNamespaces(ctx, c, opts.Namespaces)
 	if err != nil {
 		return nil, err
@@ -377,19 +380,16 @@ func (col *clusterCollector) collect(ctx context.Context, ns string) error {
 // the API server sends metadata only, so values never cross the wire.
 func (col *clusterCollector) collectConfigRefs(ctx context.Context, ns string, wrap func(string, error) error) error {
 	b := col.b
-	kinds := []struct {
+	type configKind struct {
 		name string
 		gvr  schema.GroupVersionResource
 		add  func(snapshot.ConfigRef)
-	}{
+	}
+	kinds := []configKind{
 		{"ConfigMap", corev1.SchemeGroupVersion.WithResource("configmaps"), func(r snapshot.ConfigRef) { b.s.ConfigMaps = append(b.s.ConfigMaps, r) }},
 	}
 	if !col.skipSecrets {
-		kinds = append(kinds, struct {
-			name string
-			gvr  schema.GroupVersionResource
-			add  func(snapshot.ConfigRef)
-		}{"Secret", corev1.SchemeGroupVersion.WithResource("secrets"), func(r snapshot.ConfigRef) { b.s.Secrets = append(b.s.Secrets, r) }})
+		kinds = append(kinds, configKind{"Secret", corev1.SchemeGroupVersion.WithResource("secrets"), func(r snapshot.ConfigRef) { b.s.Secrets = append(b.s.Secrets, r) }})
 	}
 	for _, kind := range kinds {
 		res := col.c.Metadata.Resource(kind.gvr).Namespace(ns)
