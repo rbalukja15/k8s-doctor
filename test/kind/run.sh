@@ -102,7 +102,6 @@ for leak in kind-test-secret-value-do-not-leak kind-test-configmap-value kind-te
 done
 pass "no Secret, ConfigMap or env values in the snapshot"
 
-
 # The namespaced Role: one namespace, no Secret access at all.
 sed 's/my-app/shop/g' deploy/rbac/readonly-role-namespaced.yaml | "$KUBECTL" --context "$CTX" apply -f - >/dev/null
 sa_kubeconfig shop k8s-doctor "$WORK/kubeconfig-ns"
