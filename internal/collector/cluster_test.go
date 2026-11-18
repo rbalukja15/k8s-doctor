@@ -168,6 +168,9 @@ func TestClusterNamespaceFilter(t *testing.T) {
 	if len(s.Spec.Workloads) != 1 || s.Spec.Workloads[0].Name != "coredns" {
 		t.Errorf("namespace filter ignored: %+v", s.Spec.Workloads)
 	}
+	if s, err := collector.Cluster(context.Background(), c, collector.ClusterOptions{Namespaces: []string{"shop", "shop"}}); err != nil || len(s.Spec.Namespaces) != 1 {
+		t.Errorf("a namespace named twice: err %v, namespaces %+v", err, s)
+	}
 	if _, err := collector.Cluster(context.Background(), c, collector.ClusterOptions{Namespaces: []string{"nope"}}); err == nil {
 		t.Error("expected an error for a missing namespace")
 	}
