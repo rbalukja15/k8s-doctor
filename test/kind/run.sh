@@ -122,7 +122,9 @@ K8S_DOCTOR_KIND_KUBECONFIG="$WORK/kubeconfig" "$GO" test -count=1 -run 'TestCros
   || fail "cluster and manifest modes disagree on spec"
 pass "cluster and manifest modes agree on spec"
 
-# The full check runs too; exit codes 10-13 just mean findings.
+# The full check runs too; exit codes 10-13 just mean findings. It covers
+# every non-system namespace, shop and crossmode alike, so these assertions
+# only require some findings and a findings exit code, never exact counts.
 set +e
 "$K8S_DOCTOR" check --cluster "${SA[@]}" --format json --report "$WORK/report.json" >/dev/null 2>"$WORK/stderr"
 code=$?
