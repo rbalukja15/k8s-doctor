@@ -145,7 +145,8 @@ func (pdbBlocksDrain) Evaluate(s *snapshot.Snapshot) []rules.Finding {
 
 // minAvailableBlocks checks an integer minAvailable against the fewest
 // replicas of the workloads the PDB selects. With no selected workload in
-// the snapshot there is nothing to compare, so it stays quiet.
+// the snapshot, or only ones scaled to zero, there is nothing to compare,
+// so it stays quiet.
 func minAvailableBlocks(s *snapshot.Snapshot, p *snapshot.PodDisruptionBudget, ref snapshot.ResourceRef) (rules.Finding, bool) {
 	minAvailable, err := strconv.Atoi(p.MinAvailable)
 	if err != nil {
@@ -155,8 +156,8 @@ func minAvailableBlocks(s *snapshot.Snapshot, p *snapshot.PodDisruptionBudget, r
 	for i := range s.Spec.Workloads {
 		w := &s.Spec.Workloads[i]
 		replicas, ok := lowestReplicas(&s.Spec, w)
-		if !ok || !selects(p, w) {
-			continue
+		if !ok || replicas == 0 || !selects(p, w) {
+			continue // a workload scaled to zero has no pods to evict
 		}
 		if int32(minAvailable) < replicas {
 			return rules.Finding{}, false
