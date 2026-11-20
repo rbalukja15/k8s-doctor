@@ -72,6 +72,66 @@
         }
       },
       {
+        "kind": "Deployment",
+        "apiVersion": "apps/v1",
+        "name": "cache",
+        "namespace": "shop",
+        "template": {
+          "labels": {
+            "app": "cache"
+          },
+          "spec": {
+            "securityContext": {
+              "runAsNonRoot": true
+            },
+            "containers": [
+              {
+                "name": "cache",
+                "image": "ghcr.io/acme/cache:1.0.0",
+                "imagePullPolicy": "IfNotPresent",
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "memory": "256Mi"
+                  }
+                },
+                "readinessProbe": {
+                  "handler": "httpGet",
+                  "path": "/healthz",
+                  "port": "8080",
+                  "periodSeconds": 10
+                },
+                "livenessProbe": {
+                  "handler": "httpGet",
+                  "path": "/livez",
+                  "port": "8080",
+                  "periodSeconds": 10
+                },
+                "securityContext": {
+                  "runAsNonRoot": true,
+                  "allowPrivilegeEscalation": false,
+                  "readOnlyRootFilesystem": true
+                }
+              }
+            ],
+            "topologySpreadConstraints": [
+              {
+                "topologyKey": "kubernetes.io/hostname",
+                "maxSkew": 1,
+                "whenUnsatisfiable": "ScheduleAnyway"
+              }
+            ]
+          }
+        },
+        "replicas": 2,
+        "selector": {
+          "app": "cache"
+        }
+      },
+      {
         "kind": "Job",
         "apiVersion": "batch/v1",
         "name": "migrate",
@@ -133,6 +193,15 @@
           "app": "api"
         },
         "maxUnavailable": "1"
+      },
+      {
+        "apiVersion": "policy/v1",
+        "name": "cache",
+        "namespace": "shop",
+        "selector": {
+          "app": "cache"
+        },
+        "maxUnavailable": "1"
       }
     ]
   },
@@ -180,6 +249,30 @@
           "kind": "Deployment",
           "namespace": "shop",
           "name": "api"
+        }
+      },
+      {
+        "name": "cache-4b2c-a",
+        "namespace": "shop",
+        "phase": "Running",
+        "nodeName": "worker-1",
+        "containers": [
+          {
+            "name": "cache",
+            "ready": true,
+            "restartCount": 12,
+            "state": "running",
+            "lastTermination": {
+              "reason": "Error",
+              "exitCode": 1,
+              "finishedAt": "2026-11-20T09:00:00Z"
+            }
+          }
+        ],
+        "owner": {
+          "kind": "Deployment",
+          "namespace": "shop",
+          "name": "cache"
         }
       },
       {

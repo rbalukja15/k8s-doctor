@@ -4,14 +4,29 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/rbalukja15/k8s-doctor/internal/rules"
 	"github.com/rbalukja15/k8s-doctor/internal/snapshot"
 )
 
-// crashRestartThreshold is the restart count from which a container counts
-// as crashlooping even when it happens to be running at collection time.
+// crashRestartThreshold is the restart count from which a container that
+// is not ready counts as crashlooping even when it is between back-offs at
+// collection time. Restart counts never reset, so a ready container is not
+// judged by its count: it may have restarted those times over months.
 const crashRestartThreshold = 5
+
+// maxEvidencePods caps the pod names a runtime finding lists, so a large
+// incident does not produce one enormous evidence string.
+const maxEvidencePods = 5
+
+// podEvidence lists the first maxEvidencePods pod names, then "+N more".
+func podEvidence(pods []string) string {
+	if len(pods) <= maxEvidencePods {
+		return strings.Join(pods, ",")
+	}
+	return strings.Join(pods[:maxEvidencePods], ",") + ",+" + strconv.Itoa(len(pods)-maxEvidencePods) + " more"
+}
 
 // containerTarget is where a runtime finding points: the workload that owns
 // the pod and the container's field path in its manifest, or the bare pod
@@ -113,7 +128,7 @@ func (podCrashlooping) Evaluate(s *snapshot.Snapshot) []rules.Finding {
 	var out []rules.Finding
 	for _, g := range groupPods(s, func(cs *snapshot.ContainerStatus) (string, int32, bool) {
 		backoff := cs.State == "waiting" && cs.Reason == "CrashLoopBackOff"
-		if !backoff && cs.RestartCount < crashRestartThreshold {
+		if !backoff && (cs.Ready || cs.RestartCount < crashRestartThreshold) {
 			return "", 0, false
 		}
 		reason := ""
@@ -124,7 +139,8 @@ func (podCrashlooping) Evaluate(s *snapshot.Snapshot) []rules.Finding {
 	}) {
 		evidence := map[string]string{
 			"container":   g.container,
-			"pods":        strings.Join(g.pods, ","),
+			"pods":        podEvidence(g.pods),
+			"podCount":    strconv.Itoa(len(g.pods)),
 			"maxRestarts": strconv.Itoa(int(g.maxCount)),
 		}
 		if len(g.reasons) > 0 {
@@ -153,22 +169,40 @@ func newContainerOOMKilled() rules.Rule {
 		modes:    rules.ClusterOnly,
 		description: "The container was killed for exceeding its memory limit. Either the limit is too low for " +
 			"the workload's real peak, or the process leaks memory. Compare the limit with observed usage " +
-			"before raising it.",
+			"before raising it. Kubernetes keeps the last termination until the container exits again, so " +
+			"check lastOOMKilledAt: an old kill on a container that has run fine since may already be fixed.",
 	}}
 }
 
 func (containerOOMKilled) Evaluate(s *snapshot.Snapshot) []rules.Finding {
 	var out []rules.Finding
 	for _, g := range groupPods(s, func(cs *snapshot.ContainerStatus) (string, int32, bool) {
-		oom := cs.State == "terminated" && cs.Reason == "OOMKilled" ||
-			cs.LastTermination != nil && cs.LastTermination.Reason == "OOMKilled"
-		return "", cs.RestartCount, oom
+		if cs.State == "terminated" && cs.Reason == "OOMKilled" {
+			return "now", cs.RestartCount, true
+		}
+		if t := cs.LastTermination; t != nil && t.Reason == "OOMKilled" {
+			if t.FinishedAt.IsZero() {
+				return "", cs.RestartCount, true
+			}
+			return t.FinishedAt.UTC().Format(time.RFC3339), cs.RestartCount, true
+		}
+		return "", 0, false
 	}) {
+		evidence := map[string]string{
+			"container": g.container,
+			"pods":      podEvidence(g.pods),
+			"podCount":  strconv.Itoa(len(g.pods)),
+		}
+		// reasons holds "now" or RFC 3339 times, sorted, so the last one
+		// is the most recent kill.
+		if n := len(g.reasons); n > 0 {
+			evidence["lastOOMKilledAt"] = g.reasons[n-1]
+		}
 		out = append(out, rules.Finding{
 			Resource:  g.target.ref,
 			FieldPath: g.target.path + ".resources.limits.memory",
 			Message:   "container " + g.container + " was OOMKilled in " + strconv.Itoa(len(g.pods)) + " pod(s)",
-			Evidence:  map[string]string{"container": g.container, "pods": strings.Join(g.pods, ",")},
+			Evidence:  evidence,
 		})
 	}
 	return out

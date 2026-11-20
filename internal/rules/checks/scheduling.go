@@ -69,7 +69,8 @@ func newHPAMissingRequests() rules.Rule {
 		modes:    rules.AllModes,
 		description: "The HorizontalPodAutoscaler scales on resource utilization, which is usage as a share of " +
 			"the request, but a container of its target has no request for that resource. The HPA reports " +
-			"the metric as unknown and never scales the workload.",
+			"the metric as unknown and never scales the workload. A default request from a namespace " +
+			"LimitRange is not visible to this check; if one applies, the finding is a false positive.",
 	}}
 }
 
@@ -77,27 +78,39 @@ func (hpaMissingRequests) Evaluate(s *snapshot.Snapshot) []rules.Finding {
 	var out []rules.Finding
 	for i := range s.Spec.Workloads {
 		w := &s.Spec.Workloads[i]
-		hpa := s.Spec.FindHPAFor(w)
-		if hpa == nil {
+		// Every HPA that targets the workload, not just the first: two HPAs
+		// on one target is a misconfiguration, but each can still be broken.
+		for k := range s.Spec.HorizontalPodAutoscalers {
+			if h := &s.Spec.HorizontalPodAutoscalers[k]; targets(h, w) {
+				out = append(out, missingRequests(h, w)...)
+			}
+		}
+	}
+	return out
+}
+
+func targets(h *snapshot.HorizontalPodAutoscaler, w *snapshot.Workload) bool {
+	return h.Namespace == w.Namespace && h.TargetRef.Kind == w.Kind && h.TargetRef.Name == w.Name
+}
+
+func missingRequests(hpa *snapshot.HorizontalPodAutoscaler, w *snapshot.Workload) []rules.Finding {
+	var out []rules.Finding
+	for _, m := range hpa.Metrics {
+		if m.Type != "Resource" || m.Target != "Utilization" || (m.Resource != "cpu" && m.Resource != "memory") {
 			continue
 		}
-		for _, m := range hpa.Metrics {
-			if m.Type != "Resource" || m.Target != "Utilization" || (m.Resource != "cpu" && m.Resource != "memory") {
+		for j := range w.Template.Spec.Containers {
+			c := &w.Template.Spec.Containers[j]
+			if hasQuantity(c.Resources.Requests, m.Resource) || hasQuantity(c.Resources.Limits, m.Resource) {
 				continue
 			}
-			for j := range w.Template.Spec.Containers {
-				c := &w.Template.Spec.Containers[j]
-				if hasQuantity(c.Resources.Requests, m.Resource) || hasQuantity(c.Resources.Limits, m.Resource) {
-					continue
-				}
-				out = append(out, rules.Finding{
-					Resource:  w.Ref(),
-					FieldPath: rules.ContainerPath(w, c) + ".resources.requests." + m.Resource,
-					Message: "HPA " + hpa.Name + " scales on " + m.Resource + " utilization but container " + c.Name +
-						" has no " + m.Resource + " request",
-					Evidence: map[string]string{"hpa": hpa.Name, "metric": m.Resource, "container": c.Name},
-				})
-			}
+			out = append(out, rules.Finding{
+				Resource:  w.Ref(),
+				FieldPath: rules.ContainerPath(w, c) + ".resources.requests." + m.Resource,
+				Message: "HPA " + hpa.Name + " scales on " + m.Resource + " utilization but container " + c.Name +
+					" has no " + m.Resource + " request",
+				Evidence: map[string]string{"hpa": hpa.Name, "metric": m.Resource, "container": c.Name},
+			})
 		}
 	}
 	return out

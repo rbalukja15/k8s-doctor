@@ -315,7 +315,7 @@
         "containers": [
           {
             "name": "worker",
-            "ready": true,
+            "ready": false,
             "restartCount": 9,
             "state": "running",
             "lastTermination": {
