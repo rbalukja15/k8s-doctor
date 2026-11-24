@@ -18,7 +18,7 @@ The snapshot is a JSON document. The Go types in [`internal/snapshot`](../../int
 Snapshot
 ├── schemaVersion   "v1alpha1"
 ├── mode            "manifest" | "cluster"
-├── source          cluster context, or path + overlay {name, namePrefix, nameSuffix, namespace}
+├── source          cluster context, or path + overlay {name, namePrefix, nameSuffix, namespace, origins}
 ├── spec            desired state, BOTH modes
 │   ├── namespaces
 │   ├── workloads           Deployment, StatefulSet, DaemonSet, Job, CronJob

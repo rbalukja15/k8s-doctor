@@ -4,7 +4,11 @@
   "source": {
     "path": "testdata/kustomize/base",
     "overlay": {
-      "name": "base"
+      "name": "base",
+      "origins": {
+        "ConfigMap/default/web-config-bmdfmgm6d4": "web-config",
+        "Secret/default/web-secret-f7hcmhdcg9": "web-secret"
+      }
     }
   },
   "spec": {

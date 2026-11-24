@@ -2,6 +2,13 @@
 
 Short notes on what was built and what was learned, newest first.
 
+## 2026-11-24: Drift 1/3: matching objects across overlays
+
+- Objects match on kind plus the name they have in their source file. The collector records that name as `origins` in the snapshot, so drift needs only two snapshots, not the repositories.
+- kustomize strips its own name-tracking annotations at the end of a build, and the code that keeps them is internal to kustomize. So the collector reads the kustomization tree instead: every directory reachable through `resources`, `bases` and `components`, with each one's `namePrefix` and `nameSuffix` combined the way kustomize applies them (outer prefix first, inner suffix first), plus the generator names whose output gets a hash. A prefix set in a parent of the tenant overlay is found the same way as one in the tenant itself.
+- An overlay's own Namespace object matches across overlays whatever it is called. Two objects with one source name in two namespaces of one overlay are kept apart rather than guessed at.
+- An object in one overlay only becomes a `drift-resource-missing` finding, for example the HPA the prod layer adds and staging lacks.
+
 ## 2026-11-24: End-to-end GitOps fixture
 
 - `fixtures/e2e/gitops` is a synthetic copy of a multi-tenant Argo CD repo: a base, a staging overlay, a prod layer that tenants build on, two kustomize Components, SealedSecrets and Applications. Later M7 issues test against it.
