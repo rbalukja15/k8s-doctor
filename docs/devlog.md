@@ -2,6 +2,12 @@
 
 Short notes on what was built and what was learned, newest first.
 
+## 2026-11-24: Drift 3/3: the drift command
+
+- `k8s-doctor drift --base <overlay> --target <overlay>` builds both overlays, matches and diffs them, and writes the same report as `check`, with a `drift` object naming the two sides. Exit codes and `--fail-on` work as for `check`, so a CI job can gate on drift the same way.
+- Labeled drift fixtures under `fixtures/drift` cover an environment pair and a clean tenant pair from `e2e/gitops`, plus two tenants built for the purpose on the same layers: `umbrella`, which drifted, and `hooli`, which differs only where the presets expect it. `make eval` will score them once it exists (#21).
+- The HTML section (#19) and per-target drift in the v2 report (#41) wait for those issues.
+
 ## 2026-11-24: Drift 2/3: field diff and allowlist
 
 - Matched objects are flattened to manifest-style field paths, with list items addressed by name, and compared. ConfigMap and Secret keys compare by name only, which is enough to catch a config key one tenant has and the other lacks.

@@ -1,0 +1,11 @@
+description: "A prod tenant that dropped runAsNonRoot and added a config key the other tenants lack."
+kind: positive
+base: ../../e2e/gitops/deployables/webshop/overlays/prod/tenant/acme
+target: umbrella
+findings:
+  - rule: drift-field
+    resource: Deployment/webshop-umbrella/umbrella-webshop
+    field: spec.template.spec.securityContext.runAsNonRoot
+  - rule: drift-field
+    resource: ConfigMap/webshop-umbrella/umbrella-webshop-config-62tm5f627h
+    field: data.FEATURE_BETA

@@ -9,6 +9,7 @@ $ k8s-doctor --manifests deploy/                         # a folder of plain man
 $ k8s-doctor check --snapshot snapshot.json            # or simply: k8s-doctor --snapshot snapshot.json
 $ k8s-doctor check --snapshot snapshot.json --format json > report.json
 $ k8s-doctor check --snapshot snapshot.json --report report.json --fail-on medium
+$ k8s-doctor drift --base overlays/staging --target overlays/prod/tenant/acme   # overlay drift
 $ k8s-doctor rules                                      # list built-in rules
 $ k8s-doctor schema                                     # JSON Schema of the report
 ```
@@ -72,6 +73,17 @@ and resource context where possible.
 Provider errors fall back to the rule description and produce a warning on
 stderr. `input.llm` is true only when at least one generated explanation is
 included in the report. The default configuration is offline.
+
+## Drift
+
+```console
+$ k8s-doctor drift --base overlays/staging --target overlays/prod/tenant/acme
+$ k8s-doctor drift --base overlays/prod/tenant/acme --target overlays/prod/tenant/globex --format json
+```
+
+`drift` builds two kustomize overlays with the manifest collector and reports what differs between them beyond the differences the `drift` section of the config expects ([drift.md](drift.md)). It works the same for two environments and for two tenants. Findings point at objects in the target.
+
+It takes `--base` and `--target` (both required), plus `--config`, `--format`, `--report`, `--fail-on`, `--color` and `--explain` with the same meaning as for `check`. The exit codes are the same too. The JSON report has a `drift` object with the `path` and `overlay` name of each side, `input` describes the target, and `rules` lists the two drift rules.
 
 ## Exit codes
 

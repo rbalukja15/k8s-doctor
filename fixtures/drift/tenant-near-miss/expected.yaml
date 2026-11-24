@@ -1,0 +1,5 @@
+description: "A prod tenant with more replicas, a newer image tag, bigger resources and its own host: every difference is one a default preset expects."
+kind: near-miss
+base: ../../e2e/gitops/deployables/webshop/overlays/prod/tenant/acme
+target: hooli
+findings: []

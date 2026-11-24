@@ -1,0 +1,8 @@
+description: "Staging against a prod tenant. Image tag and resources differ as the default presets expect; the prod-only HPA does not."
+kind: positive
+base: ../../e2e/gitops/deployables/webshop/overlays/staging
+target: ../../e2e/gitops/deployables/webshop/overlays/prod/tenant/acme
+findings:
+  - rule: drift-resource-missing
+    resource: HorizontalPodAutoscaler/webshop-acme/acme-webshop
+    field: metadata.name

@@ -1,0 +1,5 @@
+description: "Two prod tenants from e2e/gitops that differ only in prefix, namespace, hostname and sealed ciphertext."
+kind: clean
+base: ../../e2e/gitops/deployables/webshop/overlays/prod/tenant/acme
+target: ../../e2e/gitops/deployables/webshop/overlays/prod/tenant/globex
+findings: []

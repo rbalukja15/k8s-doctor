@@ -1,0 +1,83 @@
+package cli_test
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/rbalukja15/k8s-doctor/internal/cli"
+	"github.com/rbalukja15/k8s-doctor/internal/report"
+)
+
+const overlays = "../../fixtures/e2e/gitops/deployables/webshop/overlays/"
+
+func TestDriftCommand(t *testing.T) {
+	// The prod-only HPA is a medium drift-resource-missing finding.
+	code, out, errOut := run("drift", "--base", overlays+"staging", "--target", overlays+"prod/tenant/acme", "--fail-on", "medium")
+	if code != cli.ExitFindingMedium {
+		t.Fatalf("code %d, stderr %q, stdout:\n%s", code, errOut, out)
+	}
+	for _, want := range []string{"drift", "staging", "acme", "drift-resource-missing", "HorizontalPodAutoscaler"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("text output lacks %q:\n%s", want, out)
+		}
+	}
+	// --fail-on high (the default) passes on a medium finding.
+	if code, _, _ := run("drift", "--base", overlays+"staging", "--target", overlays+"prod/tenant/acme"); code != cli.ExitOK {
+		t.Errorf("default --fail-on: code %d, want 0", code)
+	}
+	// Two tenants: clean.
+	code, out, _ = run("drift", "--base", overlays+"prod/tenant/acme", "--target", overlays+"prod/tenant/globex", "--format", "json")
+	if code != cli.ExitOK {
+		t.Fatalf("tenants: code %d", code)
+	}
+	var r report.Report
+	if err := json.Unmarshal([]byte(out), &r); err != nil {
+		t.Fatal(err)
+	}
+	if r.Drift == nil || r.Drift.Base.Overlay != "acme" || r.Drift.Target.Overlay != "globex" || r.Summary.Total != 0 {
+		t.Errorf("tenant report: drift %+v, summary %+v", r.Drift, r.Summary)
+	}
+}
+
+func TestDriftConfig(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "cfg.yaml")
+	if err := os.WriteFile(cfg, []byte("drift:\n  presets: []\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, out, _ := run("drift", "--base", overlays+"staging", "--target", overlays+"prod/tenant/acme",
+		"--config", cfg, "--fail-on", "low", "--format", "json")
+	var r report.Report
+	if err := json.Unmarshal([]byte(out), &r); err != nil {
+		t.Fatal(err)
+	}
+	if code != cli.ExitFindingMedium || r.Summary.BySeverity["low"] == 0 {
+		t.Errorf("with presets off: code %d, summary %+v; want the image and resource differences too", code, r.Summary)
+	}
+	if err := os.WriteFile(cfg, []byte("drift:\n  presets: [replica]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, errOut := run("drift", "--base", overlays+"staging", "--target", overlays+"prod/tenant/acme", "--config", cfg); code != cli.ExitError ||
+		!strings.Contains(errOut, "unknown preset") {
+		t.Errorf("unknown preset: code %d, stderr %q", code, errOut)
+	}
+}
+
+func TestDriftUsage(t *testing.T) {
+	for _, args := range [][]string{
+		{"drift"},
+		{"drift", "--base", overlays + "staging"},
+		{"drift", "--base", overlays + "staging", "--target", overlays + "prod/tenant/acme", "--format", "yaml"},
+		{"drift", "--base", overlays + "staging", "--target", overlays + "prod/tenant/acme", "extra"},
+	} {
+		if code, _, _ := run(args...); code != cli.ExitUsage {
+			t.Errorf("%v: code %d, want usage error", args, code)
+		}
+	}
+	if code, _, errOut := run("drift", "--base", "nope", "--target", overlays+"staging"); code != cli.ExitError || errOut == "" {
+		t.Errorf("missing base: code %d, stderr %q", code, errOut)
+	}
+}
