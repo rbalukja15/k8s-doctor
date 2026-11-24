@@ -28,7 +28,7 @@ flowchart LR
 | Rule engine, severity, finding IDs, config | `internal/rules`, `internal/config` | #10 | Done |
 | Built-in rules | `internal/rules/checks` | #11, #12, #13 | Done |
 | Fixtures and runner | `fixtures/`, `internal/fixtures` | #15 | Done |
-| Overlay drift | `internal/drift` | #14, #28–#30 | Matching done (#28) |
+| Overlay drift | `internal/drift` | #14, #28–#30 | Matching and field diff done (#28, #29) |
 | LLM client, redaction, `--no-llm` | `internal/llm` | #26 | Implemented |
 | Explain / correlate | `internal/llm` | #16, #17 | Planned |
 | Patch drafting | — | #18 | Planned |
