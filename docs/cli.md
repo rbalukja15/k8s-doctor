@@ -83,7 +83,7 @@ $ k8s-doctor drift --base overlays/prod/tenant/acme --target overlays/prod/tenan
 
 `drift` builds two kustomize overlays with the manifest collector and reports what differs between them beyond the differences the `drift` section of the config expects ([drift.md](drift.md)). It works the same for two environments and for two tenants. Findings point at objects in the target.
 
-It takes `--base` and `--target` (both required), plus `--config`, `--format`, `--report`, `--fail-on`, `--color` and `--explain` with the same meaning as for `check`. The exit codes are the same too. The JSON report has a `drift` object with the `path` and `overlay` name of each side, `input` describes the target, and `rules` lists the two drift rules.
+It takes `--base` and `--target` (both required), plus `--config`, `--format`, `--report`, `--fail-on`, `--color` and `--explain` with the same meaning as for `check`. The exit codes are the same too. Only the `drift` section of the config applies: per-rule settings under `rules` are for `check`, and naming a drift rule there is an error. Accept a difference with `drift.allowlist` instead. `--base` and `--target` must be different directories. The JSON report has a `drift` object with the `path` and `overlay` name of each side, `input` describes the target, and `rules` lists the two drift rules.
 
 ## Exit codes
 

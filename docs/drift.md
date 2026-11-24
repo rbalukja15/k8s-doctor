@@ -47,6 +47,8 @@ Leaving `presets` out gives the default set above; `presets: []` turns them all 
 | `ingressClassAndIssuer` | Ingress class and cert-manager issuer (from #43) |
 | `ipAllowlists` | KongPlugin `config.allow` and `config.deny` (from #43) |
 
+The `rules` section of the config does not apply to drift, and naming a drift rule there is an error; the allowlist is how a difference is accepted.
+
 Allowlist entries are field-path globs, optionally limited to one kind with `Kind:`. `*` matches within one path segment and `**` across segments.
 
 ## Fixtures

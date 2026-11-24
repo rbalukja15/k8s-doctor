@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"path/filepath"
 	"time"
 
 	"github.com/rbalukja15/k8s-doctor/internal/collector"
@@ -75,6 +76,11 @@ func runDrift(o *driftOptions, env Env) (int, error) {
 	if o.base == "" || o.target == "" {
 		return 0, fmt.Errorf("%w: --base and --target are both required", errUsage)
 	}
+	if same, err := sameDir(o.base, o.target); err != nil {
+		return 0, err
+	} else if same {
+		return 0, fmt.Errorf("%w: --base and --target are the same directory", errUsage)
+	}
 	failOn, err := parseFailOn(o.failOn)
 	if err != nil {
 		return 0, err
@@ -89,6 +95,11 @@ func runDrift(o *driftOptions, env Env) (int, error) {
 	cfg, err := loadConfig(o.configPath)
 	if err != nil {
 		return 0, err
+	}
+	for _, info := range drift.Rules() {
+		if _, ok := cfg.Rules[info.ID]; ok {
+			return 0, fmt.Errorf("config: rules.%s: the rules section applies to check only; use drift.allowlist to accept a drift difference", info.ID)
+		}
 	}
 	opts, err := drift.NewOptions(cfg.Drift)
 	if err != nil {
@@ -125,4 +136,17 @@ func runDrift(o *driftOptions, env Env) (int, error) {
 		return ExitOK, nil
 	}
 	return ExitCodeFor(worst), nil
+}
+
+// sameDir reports whether two paths name the same directory.
+func sameDir(a, b string) (bool, error) {
+	aa, err := filepath.Abs(a)
+	if err != nil {
+		return false, err
+	}
+	bb, err := filepath.Abs(b)
+	if err != nil {
+		return false, err
+	}
+	return aa == bb, nil
 }

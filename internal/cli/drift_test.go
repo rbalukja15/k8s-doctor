@@ -57,6 +57,15 @@ func TestDriftConfig(t *testing.T) {
 	if code != cli.ExitFindingMedium || r.Summary.BySeverity["low"] == 0 {
 		t.Errorf("with presets off: code %d, summary %+v; want the image and resource differences too", code, r.Summary)
 	}
+	// Per-rule settings do not apply to drift; naming a drift rule there is
+	// an error rather than a setting that silently does nothing.
+	if err := os.WriteFile(cfg, []byte("rules:\n  drift-field:\n    enabled: false\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, errOut := run("drift", "--base", overlays+"staging", "--target", overlays+"prod/tenant/acme", "--config", cfg); code != cli.ExitError ||
+		!strings.Contains(errOut, "drift.allowlist") {
+		t.Errorf("drift rule in rules section: code %d, stderr %q", code, errOut)
+	}
 	if err := os.WriteFile(cfg, []byte("drift:\n  presets: [replica]\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -76,6 +85,10 @@ func TestDriftUsage(t *testing.T) {
 		if code, _, _ := run(args...); code != cli.ExitUsage {
 			t.Errorf("%v: code %d, want usage error", args, code)
 		}
+	}
+	if code, _, errOut := run("drift", "--base", overlays+"staging", "--target", overlays+"staging/"); code != cli.ExitUsage ||
+		!strings.Contains(errOut, "same directory") {
+		t.Errorf("same directory: code %d, stderr %q", code, errOut)
 	}
 	if code, _, errOut := run("drift", "--base", "nope", "--target", overlays+"staging"); code != cli.ExitError || errOut == "" {
 		t.Errorf("missing base: code %d, stderr %q", code, errOut)
