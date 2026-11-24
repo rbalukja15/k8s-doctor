@@ -1,0 +1,16 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: webshop-prod-initech
+  namespace: argocd
+spec:
+  project: shop
+  source:
+    repoURL: https://git.example.com/platform/gitops.git
+    targetRevision: main
+    path: deployables/webshop/overlays/prod/tenant/initech
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: webshop-initech
+  syncPolicy:
+    automated: {prune: true, selfHeal: true}

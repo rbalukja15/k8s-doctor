@@ -1,0 +1,15 @@
+# The prod environment layer. Tenants under ../tenant/ build on it; it is not
+# deployed on its own.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../../base
+  - hpa.yaml
+components:
+  - ../../../../../components/node-placement
+patches:
+  - target: {kind: Ingress, name: webshop}
+    patch: |-
+      - op: replace
+        path: /metadata/annotations/cert-manager.io~1cluster-issuer
+        value: letsencrypt-prod

@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - kongplugin.yaml
+patches:
+  - target: {kind: Ingress}
+    patch: |-
+      - op: add
+        path: /metadata/annotations/konghq.com~1plugins
+        value: ip-whitelist

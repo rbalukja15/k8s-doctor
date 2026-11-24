@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webshop
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: webshop}
+  template:
+    metadata:
+      labels: {app: webshop}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 10001}
+      topologySpreadConstraints:
+        - {maxSkew: 1, topologyKey: kubernetes.io/hostname, whenUnsatisfiable: ScheduleAnyway, labelSelector: {matchLabels: {app: webshop}}}
+      containers:
+        - name: webshop
+          image: registry.example.com/shop/webshop:1.8.0
+          imagePullPolicy: IfNotPresent
+          ports: [{name: http, containerPort: 8080}]
+          envFrom:
+            - configMapRef: {name: webshop-config}
+            - secretRef: {name: webshop-db}
+          resources:
+            requests: {cpu: 100m, memory: 192Mi}
+            limits: {memory: 384Mi}
+          readinessProbe: {httpGet: {path: /healthz, port: http}}
+          livenessProbe: {httpGet: {path: /livez, port: http}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true}
+          volumeMounts: [{name: tmp, mountPath: /tmp}]
+      volumes:
+        - {name: tmp, emptyDir: {}}

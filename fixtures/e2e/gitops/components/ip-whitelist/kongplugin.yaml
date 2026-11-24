@@ -1,0 +1,9 @@
+apiVersion: configuration.konghq.com/v1
+kind: KongPlugin
+metadata:
+  name: ip-whitelist
+plugin: ip-restriction
+config:
+  allow:
+    - 192.0.2.0/24
+    - 198.51.100.17

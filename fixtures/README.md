@@ -9,6 +9,7 @@ fixtures/
 ├── _bases/                       # shared kustomize bases, not fixtures
 ├── clean/<name>/                 # no findings from ANY rule
 ├── kustomize/<name>/             # overlays exercising the manifest collector
+├── e2e/<layout>/                 # whole repository layouts with several targets
 └── <rule-id>/
     ├── positive/                 # the rule must fire, exactly as listed
     └── near-miss/                # looks like a problem, isn't: the rule stays quiet
@@ -43,3 +44,27 @@ Matching is exact on rule + resource + field, the same inputs as the stable find
 1. Create `fixtures/<rule-id>/positive/` and `fixtures/<rule-id>/near-miss/` with a `snapshot.json` and `expected.yaml` each, scoped to the rule with `rules:`.
 2. Make sure `clean/` fixtures still pass, or extend them if the rule covers a resource kind they lack.
 3. Run `make test`. `TestEveryRuleHasFixtures` fails if a registered rule has no positive, clean or near-miss fixture.
+
+## End-to-end layouts
+
+`e2e/<layout>/` holds a whole repository, built target by target. `e2e/gitops/` is a synthetic Argo CD GitOps repo: a `webshop` base, a staging overlay, a shared prod layer and the tenants `acme`, `globex` and `initech`, with Kong and node-placement components and SealedSecrets holding fake ciphertext. All names are synthetic (`example.com`, documentation IP ranges).
+
+Its `expected.yaml` has its own format:
+
+```yaml
+description: "..."
+targets:                       # every path an Argo CD Application points at
+  - path: deployables/webshop/overlays/prod/tenant/acme
+    status: ok                 # ok | build-failed
+  - path: deployables/webshop/overlays/prod/tenant/initech
+    status: build-failed
+    error: "is not in or below"   # substring of the build error
+    loadRestrictor: none          # builds only with LoadRestrictionsNone
+findings:                      # from every rule, each naming its target
+  - target: deployables/webshop/overlays/prod/tenant/acme
+    rule: probe-readiness-missing
+    resource: Deployment/webshop-acme/acme-webshop
+    field: spec.template.spec.containers[name=webshop].readinessProbe
+```
+
+`TestE2EGitOps` checks the target list against the Applications, builds each target with the manifest collector, and compares findings. Each rule issue that targets this layout adds its findings here.

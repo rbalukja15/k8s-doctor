@@ -1,0 +1,32 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: webshop-acme
+namePrefix: acme-
+resources:
+  - ../../common
+  - sealedsecret.yaml
+components:
+  - ../../../../../../components/ip-whitelist
+images:
+  - name: registry.example.com/shop/webshop
+    newTag: 1.8.0
+patches:
+  - path: resources.yaml
+  - target: {kind: Ingress, name: webshop}
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: acme.webshop.example.com
+      - op: replace
+        path: /spec/tls/0/hosts/0
+        value: acme.webshop.example.com
+replacements:
+  - source: {kind: Ingress, name: webshop, fieldPath: spec.rules.0.host}
+    targets:
+      - select: {kind: ConfigMap, name: webshop-config}
+        fieldPaths: [data.PUBLIC_HOST]
+  # namePrefix renames the KongPlugin but not the annotation that names it.
+  - source: {kind: KongPlugin, name: ip-whitelist, fieldPath: metadata.name}
+    targets:
+      - select: {kind: Ingress, name: webshop}
+        fieldPaths: ["metadata.annotations.[konghq.com/plugins]"]

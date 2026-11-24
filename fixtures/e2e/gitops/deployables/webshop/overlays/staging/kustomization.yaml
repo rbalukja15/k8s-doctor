@@ -1,0 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: webshop-staging
+namePrefix: staging-
+resources:
+  - ../../base
+  - sealedsecret.yaml
+images:
+  - name: registry.example.com/shop/webshop
+    newTag: 1.9.0-rc.1
+patches:
+  - target: {kind: Ingress, name: webshop}
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: webshop.staging.example.com
+      - op: replace
+        path: /spec/tls/0/hosts/0
+        value: webshop.staging.example.com
+replacements:
+  - source: {kind: Ingress, name: webshop, fieldPath: spec.rules.0.host}
+    targets:
+      - select: {kind: ConfigMap, name: webshop-config}
+        fieldPaths: [data.PUBLIC_HOST]

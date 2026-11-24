@@ -24,6 +24,9 @@ const (
 	ExpectedFile = "expected.yaml"
 	SnapshotFile = "snapshot.json"
 	ManifestsDir = "manifests"
+	// E2EDir holds end-to-end repository layouts (see e2e.go), which
+	// Discover skips.
+	E2EDir = "e2e"
 )
 
 // Kinds of fixture.
@@ -72,6 +75,9 @@ func Discover(root string) ([]Fixture, error) {
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
+		}
+		if d.IsDir() && path == filepath.Join(root, E2EDir) {
+			return filepath.SkipDir // end-to-end layouts have their own format
 		}
 		if d.IsDir() || d.Name() != ExpectedFile {
 			return nil

@@ -1,0 +1,20 @@
+description: "A synthetic Argo CD GitOps repo: a webshop base, a staging overlay, a prod layer with tenants acme, globex and initech, Kong and node-placement components, SealedSecrets with fake ciphertext."
+# Every target an Application points at. status is ok or build-failed;
+# a build-failed target names a substring of the expected build error.
+# loadRestrictor: none marks a target that reads files outside its own
+# directory; it must build with LoadRestrictionsNone.
+targets:
+  - path: deployables/webshop/overlays/staging
+    status: ok
+  - path: deployables/webshop/overlays/prod/tenant/acme
+    status: ok
+  - path: deployables/webshop/overlays/prod/tenant/globex
+    status: ok
+  # Needs --load-restrictor=LoadRestrictionsNone, which arrives with #39.
+  - path: deployables/webshop/overlays/prod/tenant/initech
+    status: build-failed
+    error: "is not in or below"
+    loadRestrictor: none
+# Findings the whole layout must produce, from every rule. Empty to start;
+# each M7 rule issue adds its own. Each entry also names its target.
+findings: []
