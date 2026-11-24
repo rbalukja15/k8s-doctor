@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -67,14 +68,16 @@ func LoadE2E(dir string) (*E2E, error) {
 	}
 	paths := map[string]bool{}
 	for _, t := range e.Targets {
-		switch {
-		case paths[t.Path]:
+		if paths[t.Path] {
 			errs = append(errs, fmt.Errorf("target %s is listed twice", t.Path))
-		case t.Status == TargetBuildFailed && t.Error == "":
-			errs = append(errs, fmt.Errorf("target %s: build-failed needs an error substring", t.Path))
-		case t.Status != TargetOK && t.Status != TargetBuildFailed:
+		}
+		if t.Status != TargetOK && t.Status != TargetBuildFailed {
 			errs = append(errs, fmt.Errorf("target %s: status %q is not ok or build-failed", t.Path, t.Status))
-		case t.LoadRestrictor != "" && t.LoadRestrictor != "none":
+		}
+		if t.Status == TargetBuildFailed && t.Error == "" {
+			errs = append(errs, fmt.Errorf("target %s: build-failed needs an error substring", t.Path))
+		}
+		if t.LoadRestrictor != "" && t.LoadRestrictor != "none" {
 			errs = append(errs, fmt.Errorf("target %s: loadRestrictor %q is not none", t.Path, t.LoadRestrictor))
 		}
 		paths[t.Path] = true
@@ -137,5 +140,6 @@ func ApplicationPaths(dir string) ([]string, error) {
 		}
 	})
 	sort.Strings(out)
-	return out, err
+	// Two Applications for one path deploy one target.
+	return slices.Compact(out), err
 }
