@@ -13,9 +13,9 @@ An object in one overlay only is a `drift-resource-missing` finding (medium) on 
 Matched objects are compared field by field. Paths follow the manifest layout down to the field the snapshot records, for example `spec.template.spec.containers[name=api].securityContext.runAsNonRoot`. List items with a name are addressed by name, so reordering is not drift. ConfigMap and Secret keys are compared by name only (`data.LOG_LEVEL`); values are never collected.
 
 Before comparing, values are normalized:
-- **Object names:** a reference to a renamed object, such as an HPA's `scaleTargetRef.name`, goes back to its source name.
-- **Namespace:** the overlay's namespace becomes `{namespace}`.
-- **Overlay name:** with the `hostnames` preset, the overlay's name in any value becomes `{overlay}`. So `acme.shop.example.com` and `globex.shop.example.com` are equal, but a different domain or path is not.
+- **Object names:** a reference to a renamed object (an HPA's `scaleTargetRef.name`, a ConfigMap or Secret volume's source) goes back to its source name, looked up by kind and name.
+- **Namespace:** a value that is exactly the overlay's namespace becomes `{namespace}`.
+- **Overlay name:** with the `hostnames` preset, the overlay's name becomes `{overlay}` where it is a whole part of a DNS label inside a hostname, so `acme.shop.example.com` and `api-acme.shop.example.com` normalize. A bare `staging`, or `staging` in a URL path or image repository, is a real value and still shows as drift.
 
 Each remaining difference is a `drift-field` finding on the target object, with both values as evidence (`(unset)` when one side lacks the field):
 
@@ -40,8 +40,8 @@ Leaving `presets` out gives the default set above; `presets: []` turns them all 
 | Preset | Ignores |
 |---|---|
 | `replicas` | `spec.replicas` |
-| `resources` | any `resources` field |
-| `imageTags` | an image that differs only in tag or digest |
+| `resources` | any `resources` field, including an empty one |
+| `imageTags` | a container or init container image that differs only in tag or digest |
 | `hostnames` | the overlay name inside values (see above) |
 | `hpaBounds` | HPA `minReplicas` and `maxReplicas` |
 | `ingressClassAndIssuer` | Ingress class and cert-manager issuer (from #43) |

@@ -2,6 +2,7 @@ package drift
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"sort"
@@ -24,7 +25,7 @@ const unset = "(unset)"
 // model yet (Ingress, KongPlugin: #43) match nothing until they land.
 var presets = map[string][]string{
 	"replicas":              {"spec.replicas"},
-	"resources":             {"**.resources.**"},
+	"resources":             {"**.resources", "**.resources.**"},
 	"hpaBounds":             {"HorizontalPodAutoscaler:spec.minReplicas", "HorizontalPodAutoscaler:spec.maxReplicas"},
 	"ingressClassAndIssuer": {"Ingress:spec.ingressClassName", "Ingress:metadata.annotations[cert-manager.io/cluster-issuer]"},
 	"ipAllowlists":          {"KongPlugin:config.allow**", "KongPlugin:config.deny**"},
@@ -118,11 +119,14 @@ func (o Options) allowed(kind, path, base, target string) bool {
 			return true
 		}
 	}
-	if o.imageTags && strings.HasSuffix(path, ".image") && imageRepo(base) == imageRepo(target) {
+	if o.imageTags && containerImage.MatchString(path) && imageRepo(base) == imageRepo(target) {
 		return true
 	}
 	return false
 }
+
+// containerImage matches the image field of a container or init container.
+var containerImage = regexp.MustCompile(`\.(containers|initContainers)\[[^\]]*\]\.image$`)
 
 // imageRepo strips the tag and digest from an image reference. A registry
 // port is not a tag: only a colon after the last slash starts one.
@@ -137,15 +141,22 @@ func imageRepo(image string) string {
 // Diff matches the objects of two overlays and reports every difference
 // that is not expected: objects present in one overlay only, and fields
 // that differ between matched objects. Findings point at the target.
-func Diff(base, target *snapshot.Snapshot, o Options) []rules.Finding {
+func Diff(base, target *snapshot.Snapshot, o Options) ([]rules.Finding, error) {
 	baseName, targetName := overlayName(base), overlayName(target)
 	m := Match(base, target)
 	out := m.Findings(baseName, targetName)
-	bObj, tObj := objects(base), objects(target)
-	bNorm, tNorm := normalizer(base, o.hostnames), normalizer(target, o.hostnames)
+	bObj, err := objects(base)
+	if err != nil {
+		return nil, err
+	}
+	tObj, err := objects(target)
+	if err != nil {
+		return nil, err
+	}
+	bNorm, tNorm := newNormalizer(base, o.hostnames), newNormalizer(target, o.hostnames)
 	for _, p := range m.Pairs {
-		bf := fields(p.Base.Kind, bObj[p.Base.String()], bNorm)
-		tf := fields(p.Target.Kind, tObj[p.Target.String()], tNorm)
+		bf := bNorm.fields(p.Base.Kind, bObj[p.Base.String()])
+		tf := tNorm.fields(p.Target.Kind, tObj[p.Target.String()])
 		for _, path := range unionKeys(bf, tf) {
 			bv, tv := valueOr(bf, path), valueOr(tf, path)
 			if bv == tv || o.allowed(p.Identity.Kind, path, bv, tv) {
@@ -165,7 +176,7 @@ func Diff(base, target *snapshot.Snapshot, o Options) []rules.Finding {
 			})
 		}
 	}
-	return out
+	return out, nil
 }
 
 // fieldSeverity ranks security settings above config and env differences,
@@ -189,51 +200,113 @@ func overlayName(s *snapshot.Snapshot) string {
 	return s.Source.Path
 }
 
-// normalizer rewrites string values so that what kustomize or the overlay
-// changed on purpose compares equal: renamed objects' names go back to
-// their source names, the overlay namespace becomes a placeholder, and with
-// hostnames the overlay name does too.
-func normalizer(s *snapshot.Snapshot, hostnames bool) func(string) string {
+// normalizer rewrites values so that what kustomize or the overlay changed
+// on purpose compares equal.
+type normalizer struct {
+	// renamed maps "Kind/name" of a renamed object to its source name, for
+	// the fields that reference another object.
+	renamed   map[string]string
+	namespace string
+	// host replaces the overlay name inside hostnames (the hostnames preset).
+	host func(string) string
+}
+
+func newNormalizer(s *snapshot.Snapshot, hostnames bool) *normalizer {
+	n := &normalizer{renamed: map[string]string{}, host: func(v string) string { return v }}
 	o := s.Source.Overlay
 	if o == nil {
-		return func(v string) string { return v }
+		return n
 	}
-	names := map[string]string{}
 	for ref, orig := range o.Origins {
 		if r, err := snapshot.ParseResourceRef(ref); err == nil {
-			names[r.Name] = orig
+			n.renamed[r.Kind+"/"+r.Name] = orig
 		}
 	}
-	var token *regexp.Regexp
+	n.namespace = o.Namespace
 	if hostnames && o.Name != "" {
-		token = regexp.MustCompile(`(^|[^a-z0-9])` + regexp.QuoteMeta(o.Name) + `($|[^a-z0-9])`)
+		n.host = hostnameNormalizer(o.Name)
 	}
+	return n
+}
+
+// value normalizes a plain string value: the overlay namespace becomes a
+// placeholder when it is the whole value, and the overlay name inside a
+// hostname does too.
+func (n *normalizer) value(v string) string {
+	if n.namespace != "" && v == n.namespace {
+		return "{namespace}"
+	}
+	return n.host(v)
+}
+
+var hostname = regexp.MustCompile(`[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+`)
+
+// hostnameNormalizer replaces name with {overlay} where it is a whole part
+// of a DNS label (split on dots and dashes) inside something shaped like a
+// hostname. A bare "staging", or "staging" in a URL path or image
+// repository, is a real value and is left alone.
+func hostnameNormalizer(name string) func(string) string {
+	token := regexp.MustCompile(`(^|[.-])` + regexp.QuoteMeta(name) + `($|[.-])`)
 	return func(v string) string {
-		if orig, ok := names[v]; ok {
-			return orig
-		}
-		if o.Namespace != "" && v == o.Namespace {
-			return "{namespace}"
-		}
-		if token != nil {
-			v = token.ReplaceAllString(v, "${1}{overlay}${2}")
-		}
-		return v
+		return hostname.ReplaceAllStringFunc(v, func(h string) string {
+			// Twice, so adjacent tokens (acme-acme) both change.
+			for range 2 {
+				h = token.ReplaceAllString(h, "${1}{overlay}${2}")
+			}
+			return h
+		})
 	}
 }
 
+// references are the fields that name another object, with the field that
+// gives its kind. A reference to a renamed object goes back to the source
+// name, so acme-webshop and globex-webshop compare equal.
+var references = []struct {
+	name *regexp.Regexp
+	kind func(fields map[string]string, prefix string) string
+}{
+	{regexp.MustCompile(`^(spec\.scaleTargetRef)\.name$`), func(f map[string]string, p string) string { return f[p+".kind"] }},
+	{regexp.MustCompile(`^(.*\.volumes\[name=[^\]]*\])\.source$`), func(f map[string]string, p string) string {
+		switch f[p+".type"] {
+		case "configMap":
+			return "ConfigMap"
+		case "secret":
+			return "Secret"
+		}
+		return ""
+	}},
+}
+
+// fields flattens an object and rewrites references to renamed objects.
+func (n *normalizer) fields(kind string, obj map[string]any) map[string]string {
+	out := fields(kind, obj, n.value)
+	for path, v := range out {
+		for _, r := range references {
+			if m := r.name.FindStringSubmatch(path); m != nil {
+				if orig, ok := n.renamed[r.kind(out, m[1])+"/"+v]; ok {
+					out[path] = orig
+				}
+			}
+		}
+	}
+	return out
+}
+
 // objects indexes the JSON form of every object by ref.
-func objects(s *snapshot.Snapshot) map[string]map[string]any {
+func objects(s *snapshot.Snapshot) (map[string]map[string]any, error) {
 	out := map[string]map[string]any{}
+	var errs []error
 	add := func(ref snapshot.ResourceRef, v any) {
 		raw, err := json.Marshal(v)
+		var m map[string]any
+		if err == nil {
+			err = json.Unmarshal(raw, &m)
+		}
 		if err != nil {
+			errs = append(errs, fmt.Errorf("drift: %s: %w", ref, err))
 			return
 		}
-		var m map[string]any
-		if json.Unmarshal(raw, &m) == nil {
-			out[ref.String()] = m
-		}
+		out[ref.String()] = m
 	}
 	sp := &s.Spec
 	for i := range sp.Namespaces {
@@ -260,7 +333,7 @@ func objects(s *snapshot.Snapshot) map[string]map[string]any {
 	for i := range sp.Secrets {
 		add(ref("Secret", sp.Secrets[i].ObjectMeta), sp.Secrets[i])
 	}
-	return out
+	return out, errors.Join(errs...)
 }
 
 // manifestPaths maps the snapshot's top-level fields to where they sit in a
@@ -272,12 +345,8 @@ func manifestPaths(kind string, obj map[string]any) map[string]string {
 		podTemplate = "spec.jobTemplate.spec.template"
 	}
 	switch kind {
-	case "Namespace":
-		return map[string]string{"labels": "metadata.labels"}
 	case "ConfigMap", "Secret":
 		return map[string]string{"labels": "metadata.labels", "keys": "data", "type": "type"}
-	case "Service":
-		return map[string]string{"labels": "metadata.labels"}
 	case "PodDisruptionBudget":
 		return map[string]string{"labels": "metadata.labels", "apiVersion": "apiVersion", "selector": "spec.selector.matchLabels"}
 	case "HorizontalPodAutoscaler":
@@ -348,7 +417,7 @@ func flatten(out map[string]string, path string, v any, norm func(string) string
 							rest[k] = val
 						}
 					}
-					key := path + "[name=" + norm(name) + "]"
+					key := path + "[name=" + name + "]"
 					if len(rest) == 0 {
 						out[key] = "(present)"
 					}
