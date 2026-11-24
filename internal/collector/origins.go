@@ -22,27 +22,48 @@ type affix struct{ prefix, suffix string }
 // kustTree is what renames objects in a kustomization and everything it
 // includes: the affixes each included kustomization produces, and the names
 // of the ConfigMap and Secret generators, whose output gets a hash suffix.
+//
+// shortcut: the affixes are not tied to the directory an object came from,
+// because kustomize drops that record at the end of a build and the code
+// that keeps it is internal. So an object without a prefix whose name
+// starts like a sibling's prefix loses that part (TestOriginsSiblingPrefixLimit).
+// That needs two branches of one tree with different prefixes and an
+// unlucky name; the fix is reading kustomize's origin annotations.
 type kustTree struct {
 	affixes    []affix
 	generators map[string]bool
 }
 
 // generatorHash is the content hash kustomize appends to generated
-// ConfigMaps and Secrets after any name suffix.
-var generatorHash = regexp.MustCompile(`-[a-z0-9]{10}$`)
+// ConfigMaps and Secrets after any name suffix: ten hex digits with 0, 1,
+// 3, a and e swapped for g, h, k, m and t (kustomize's hasher.encode).
+var generatorHash = regexp.MustCompile(`-[2456789bcdfghkmt]{10}$`)
+
+// unprefixed are the kinds kustomize never gives a namePrefix or nameSuffix.
+var unprefixed = map[string]bool{"Namespace": true, "CustomResourceDefinition": true}
 
 // readKustTree walks the kustomizations reachable from dir through
 // resources, bases and components. Remote and file entries are skipped:
 // only local directories can carry a namePrefix or a generator.
 func readKustTree(dir string) (*kustTree, error) {
 	t := &kustTree{generators: map[string]bool{}}
-	seen := map[string]bool{}
+	seen := map[affix]map[string]bool{}
+	onPath := map[string]bool{}
 	var walk func(dir string, outer affix) error
 	walk = func(dir string, outer affix) error {
 		kfile := findKustomization(dir)
 		if kfile == "" {
 			return nil
 		}
+		dir, err := filepath.Abs(dir)
+		if err != nil {
+			return err
+		}
+		if onPath[dir] {
+			return fmt.Errorf("%s includes itself", dir)
+		}
+		onPath[dir] = true
+		defer delete(onPath, dir)
 		var k struct {
 			NamePrefix         string   `json:"namePrefix"`
 			NameSuffix         string   `json:"nameSuffix"`
@@ -64,12 +85,14 @@ func readKustTree(dir string) (*kustTree, error) {
 			return fmt.Errorf("%s: %w", filepath.Join(dir, kfile), err)
 		}
 		a := affix{prefix: outer.prefix + k.NamePrefix, suffix: k.NameSuffix + outer.suffix}
-		key := dir + "\x00" + a.prefix + "\x00" + a.suffix
-		if seen[key] {
+		if seen[a] == nil {
+			seen[a] = map[string]bool{}
+			t.affixes = append(t.affixes, a)
+		}
+		if seen[a][dir] {
 			return nil
 		}
-		seen[key] = true
-		t.affixes = append(t.affixes, a)
+		seen[a][dir] = true
 		for _, g := range k.ConfigMapGenerator {
 			t.generators[g.Name] = true
 		}
@@ -77,9 +100,6 @@ func readKustTree(dir string) (*kustTree, error) {
 			t.generators[g.Name] = true
 		}
 		for _, entry := range append(append(k.Resources, k.Bases...), k.Components...) {
-			if strings.Contains(entry, "://") || strings.HasPrefix(entry, "github.com/") {
-				continue
-			}
 			child := filepath.Join(dir, entry)
 			if info, err := os.Stat(child); err == nil && info.IsDir() {
 				if err := walk(child, a); err != nil {
@@ -101,6 +121,9 @@ func readKustTree(dir string) (*kustTree, error) {
 
 // original returns the name an object had in its source file.
 func (t *kustTree) original(kind, name string) string {
+	if unprefixed[kind] {
+		return name
+	}
 	if kind == "ConfigMap" || kind == "Secret" {
 		if loc := generatorHash.FindStringIndex(name); loc != nil {
 			if orig, ok := t.strip(name[:loc[0]]); ok && t.generators[orig] {

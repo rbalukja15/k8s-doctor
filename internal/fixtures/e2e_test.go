@@ -62,7 +62,8 @@ func TestE2EGitOps(t *testing.T) {
 				t.Fatal(err)
 			}
 			checkTargetShape(t, snap)
-			checkReferences(t, build(t, filepath.Join(gitopsDir, tg.Path), types.LoadRestrictionsRootOnly), snap.Source.Overlay.NamePrefix)
+			checkReferences(t, build(t, filepath.Join(gitopsDir, tg.Path), types.LoadRestrictionsRootOnly),
+				snap.Source.Overlay.NamePrefix, strings.Contains(tg.Path, "/tenant/"))
 			want := map[rules.Key]bool{}
 			for _, f := range exp.Findings {
 				if f.Target == tg.Path {
@@ -112,10 +113,10 @@ func checkTargetShape(t *testing.T, s *snapshot.Snapshot) {
 	}
 }
 
-// build runs kustomize directly. The snapshot does not model SealedSecrets,
-// KongPlugins or envFrom yet (#43), so references between them are checked
-// on the rendered YAML.
-func build(t *testing.T, dir string, lr types.LoadRestrictions) string {
+// build runs kustomize directly and decodes the output. The snapshot does
+// not model SealedSecrets, KongPlugins, Ingress annotations or envFrom yet
+// (#43), so references between them are checked on the rendered objects.
+func build(t *testing.T, dir string, lr types.LoadRestrictions) []map[string]any {
 	t.Helper()
 	opts := krusty.MakeDefaultOptions()
 	opts.LoadRestrictions = lr
@@ -123,25 +124,81 @@ func build(t *testing.T, dir string, lr types.LoadRestrictions) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	out, err := res.AsYaml()
-	if err != nil {
-		t.Fatal(err)
+	var out []map[string]any
+	for _, r := range res.Resources() {
+		m, err := r.Map()
+		if err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, m)
 	}
-	return string(out)
+	return out
+}
+
+// field reads a nested field of a decoded object; list steps take an index.
+func field(obj any, steps ...any) any {
+	for _, s := range steps {
+		switch k := s.(type) {
+		case string:
+			m, ok := obj.(map[string]any)
+			if !ok {
+				return nil
+			}
+			obj = m[k]
+		case int:
+			l, ok := obj.([]any)
+			if !ok || k >= len(l) {
+				return nil
+			}
+			obj = l[k]
+		}
+	}
+	return obj
+}
+
+func named(objs []map[string]any, kind string) []map[string]any {
+	var out []map[string]any
+	for _, o := range objs {
+		if o["kind"] == kind {
+			out = append(out, o)
+		}
+	}
+	return out
 }
 
 // checkReferences checks that the namePrefix reaches every reference: the
-// Deployment's secretRef follows the SealedSecret (via the base's
-// nameReference config), and a tenant Ingress names its prefixed KongPlugin.
-func checkReferences(t *testing.T, out, prefix string) {
+// Deployment's secretRef names the SealedSecret (via the base's
+// nameReference config), and every tenant Ingress names its prefixed
+// KongPlugin, which must exist.
+func checkReferences(t *testing.T, objs []map[string]any, prefix string, tenant bool) {
 	t.Helper()
-	if n := strings.Count(out, "name: "+prefix+"webshop-db\n"); n != 2 {
-		t.Errorf("%swebshop-db appears %d times, want the SealedSecret and the Deployment's secretRef", prefix, n)
+	sealed := named(objs, "SealedSecret")
+	if len(sealed) != 1 || field(sealed[0], "metadata", "name") != prefix+"webshop-db" {
+		t.Fatalf("SealedSecrets = %v, want one named %swebshop-db", sealed, prefix)
 	}
-	if strings.Contains(out, "kind: KongPlugin") {
-		if !strings.Contains(out, "konghq.com/plugins: "+prefix+"ip-whitelist\n") ||
-			!strings.Contains(out, "name: "+prefix+"ip-whitelist\n") {
-			t.Errorf("the Ingress does not name the prefixed KongPlugin %sip-whitelist", prefix)
+	deploy := named(objs, "Deployment")
+	var secretRefs []any
+	for _, env := range field(deploy[0], "spec", "template", "spec", "containers", 0, "envFrom").([]any) {
+		if ref := field(env, "secretRef", "name"); ref != nil {
+			secretRefs = append(secretRefs, ref)
+		}
+	}
+	if len(secretRefs) != 1 || secretRefs[0] != prefix+"webshop-db" {
+		t.Errorf("Deployment secretRefs = %v, want [%swebshop-db]", secretRefs, prefix)
+	}
+	plugins := named(objs, "KongPlugin")
+	if !tenant {
+		if len(plugins) != 0 {
+			t.Errorf("KongPlugins = %v, want none outside the tenants", plugins)
+		}
+		return
+	}
+	if len(plugins) != 1 || field(plugins[0], "metadata", "name") != prefix+"ip-whitelist" {
+		t.Fatalf("KongPlugins = %v, want one named %sip-whitelist", plugins, prefix)
+	}
+	for _, ing := range named(objs, "Ingress") {
+		if got := field(ing, "metadata", "annotations", "konghq.com/plugins"); got != prefix+"ip-whitelist" {
+			t.Errorf("Ingress konghq.com/plugins = %v, want %sip-whitelist", got, prefix)
 		}
 	}
 }
