@@ -84,3 +84,53 @@ func TestOriginsUnchangedNames(t *testing.T) {
 		t.Errorf("origins = %v, want none", o)
 	}
 }
+
+// TestOriginsEdgeCases covers names the stripping must leave alone.
+func TestOriginsEdgeCases(t *testing.T) {
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{
+		"kustomization.yaml": "namePrefix: acme-\nresources: [objects.yaml]\n" +
+			"configMapGenerator:\n- {name: app, literals: [A=1]}\n- {name: plain, literals: [B=2], options: {disableNameSuffixHash: true}}\n",
+		// kustomize does not prefix Namespaces, so this one keeps its name.
+		// app-production ends in ten letters but is no generator hash.
+		"objects.yaml": "apiVersion: v1\nkind: Namespace\nmetadata: {name: acme-monitoring}\n---\n" +
+			"apiVersion: v1\nkind: ConfigMap\nmetadata: {name: app-production}\ndata: {X: y}\n",
+	})
+	snap, err := collector.Manifests(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := snap.Source.Overlay.Origins
+	for ref, want := range map[string]string{
+		"ConfigMap/default/acme-app-production": "app-production",
+		"ConfigMap/default/acme-plain":          "plain",
+	} {
+		if got[ref] != want {
+			t.Errorf("origin of %s = %q, want %q (all: %v)", ref, got[ref], want, got)
+		}
+	}
+	if o, ok := got["Namespace/acme-monitoring"]; ok {
+		t.Errorf("Namespace acme-monitoring got origin %q; kustomize does not prefix Namespaces", o)
+	}
+}
+
+// A known limit: affixes are not tied to the directory an object came
+// from, so an unprefixed object whose name happens to start with a
+// sibling's prefix loses that part. See the note on kustTree.
+func TestOriginsSiblingPrefixLimit(t *testing.T) {
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{
+		"kustomization.yaml":       "resources: [web, plain]\n",
+		"web/kustomization.yaml":   "namePrefix: web-\nresources: [svc.yaml]\n",
+		"web/svc.yaml":             "apiVersion: v1\nkind: Service\nmetadata: {name: front}\nspec: {ports: [{port: 80}]}\n",
+		"plain/kustomization.yaml": "resources: [svc.yaml]\n",
+		"plain/svc.yaml":           "apiVersion: v1\nkind: Service\nmetadata: {name: web-api}\nspec: {ports: [{port: 80}]}\n",
+	})
+	snap, err := collector.Manifests(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := snap.Source.Overlay.Origins["Service/default/web-api"]; got != "api" {
+		t.Errorf("origin of web-api = %q; if this now keeps the name, the limit is fixed: update kustTree's note", got)
+	}
+}

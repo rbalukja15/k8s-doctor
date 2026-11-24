@@ -6,6 +6,7 @@ Short notes on what was built and what was learned, newest first.
 
 - Objects match on kind plus the name they have in their source file. The collector records that name as `origins` in the snapshot, so drift needs only two snapshots, not the repositories.
 - kustomize strips its own name-tracking annotations at the end of a build, and the code that keeps them is internal to kustomize. So the collector reads the kustomization tree instead: every directory reachable through `resources`, `bases` and `components`, with each one's `namePrefix` and `nameSuffix` combined the way kustomize applies them (outer prefix first, inner suffix first), plus the generator names whose output gets a hash. A prefix set in a parent of the tenant overlay is found the same way as one in the tenant itself.
+- Namespaces and CRDs never get a prefix, and generator hashes use kustomize's own ten-character alphabet, so `app-production` next to an `app` generator keeps its name. One limit remains: affixes are not tied to the directory an object came from, so an unprefixed object whose name starts like a sibling branch's prefix loses that part. A test pins it.
 - An overlay's own Namespace object matches across overlays whatever it is called. Two objects with one source name in two namespaces of one overlay are kept apart rather than guessed at.
 - An object in one overlay only becomes a `drift-resource-missing` finding, for example the HPA the prod layer adds and staging lacks.
 

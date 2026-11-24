@@ -5,6 +5,7 @@
 package drift
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 
@@ -104,12 +105,9 @@ func (m Matches) Findings(baseName, targetName string) []rules.Finding {
 // identities indexes every object in a snapshot by identity.
 func identities(s *snapshot.Snapshot) map[Identity]snapshot.ResourceRef {
 	var origins map[string]string
-	if s.Source.Overlay != nil {
-		origins = s.Source.Overlay.Origins
-	}
 	var namespace string
-	if s.Source.Overlay != nil {
-		namespace = s.Source.Overlay.Namespace
+	if o := s.Source.Overlay; o != nil {
+		origins, namespace = o.Origins, o.Namespace
 	}
 	refs := objectRefs(&s.Spec)
 	count := map[Identity]int{}
@@ -173,14 +171,6 @@ func sortedKeys(m map[Identity]snapshot.ResourceRef) []Identity {
 	for k := range m {
 		keys = append(keys, k)
 	}
-	slices.SortFunc(keys, func(a, b Identity) int {
-		switch {
-		case a.String() < b.String():
-			return -1
-		case a.String() > b.String():
-			return 1
-		}
-		return 0
-	})
+	slices.SortFunc(keys, func(a, b Identity) int { return cmp.Compare(a.String(), b.String()) })
 	return keys
 }
