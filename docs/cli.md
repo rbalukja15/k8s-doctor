@@ -26,7 +26,7 @@ Exactly one of `--cluster`, `--manifests` and `--snapshot` is required. `k8s-doc
 
 ### Manifests mode
 
-- If the directory holds a `kustomization.yaml` (or `.yml`, or `Kustomization`), it is built in-process with kustomize's `krusty` API, exactly as `kustomize build` would. The overlay's `namePrefix`, `nameSuffix` and `namespace` are recorded for drift matching (#28).
+- If the directory holds a `kustomization.yaml` (or `.yml`, or `Kustomization`), it is built in-process with kustomize's `krusty` API, exactly as `kustomize build` would. The overlay's `namePrefix`, `nameSuffix` and `namespace` are recorded, and `origins` maps every renamed object to the name in its source file, for drift matching (#28). Origins account for prefixes and suffixes set in any kustomization the overlay includes, not only its own, and strip generator hashes.
 - Otherwise every `.yaml`, `.yml` and `.json` file under it is parsed, including multi-document files and `kind: List`. Hidden directories are skipped. A nested directory with its own kustomization is an error, because reading its files raw would skip the overlay: point `--manifests` at that overlay instead.
 - Objects without a namespace get `default`, as the API server would assign.
 - Kinds the snapshot does not model (Ingress, RBAC, CRDs, ...) are ignored.

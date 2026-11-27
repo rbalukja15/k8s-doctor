@@ -7,7 +7,12 @@
       "name": "prod",
       "namePrefix": "prod-",
       "nameSuffix": "-v2",
-      "namespace": "shop-prod"
+      "namespace": "shop-prod",
+      "origins": {
+        "ConfigMap/shop-prod/prod-web-config-v2-bmdfmgm6d4": "web-config",
+        "Deployment/shop-prod/prod-web-v2": "web",
+        "Secret/shop-prod/prod-web-secret-v2-f7hcmhdcg9": "web-secret"
+      }
     }
   },
   "spec": {
