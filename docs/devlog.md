@@ -2,6 +2,13 @@
 
 Short notes on what was built and what was learned, newest first.
 
+## 2026-11-24: End-to-end GitOps fixture
+
+- `fixtures/e2e/gitops` is a synthetic copy of a multi-tenant Argo CD repo: a base, a staging overlay, a prod layer that tenants build on, two kustomize Components, SealedSecrets and Applications. Later M7 issues test against it.
+- Building it found two traps a real repo hits. kustomize refuses a tenant that lists its parent directory as a resource (a cycle), so the prod layer lives beside the tenants in `prod/common`. And `namePrefix` renames a KongPlugin but not the `konghq.com/plugins` annotation that names it; the tenants fix it with a `replacement`, and the test checks the reference on the rendered YAML. That second one is a candidate rule.
+- `initech` reads a patch from outside its directory, so it builds only with `LoadRestrictionsNone`. It is listed as `build-failed` until #39 adds the flag, and the test checks it does build without the restriction.
+- The layout is clean under all 19 current rules, so `expected.yaml` lists no findings yet.
+
 ## 2026-11-20: Rules batch 3: crashloops, OOMKills, spread, HPA requests, removed APIs
 
 - `pod-crashlooping` and `container-oomkilled` read the runtime section, so they run in cluster mode only. They report against the owning workload's container path, not the Pod, and group replicas: ten crashing replicas of one Deployment are one finding, with the pod names in the evidence. A bare Pod is reported as itself.

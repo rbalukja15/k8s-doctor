@@ -1,0 +1,16 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: webshop-prod-acme
+  namespace: argocd
+spec:
+  project: shop
+  source:
+    repoURL: https://git.example.com/platform/gitops.git
+    targetRevision: main
+    path: deployables/webshop/overlays/prod/tenant/acme
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: webshop-acme
+  syncPolicy:
+    automated: {prune: true, selfHeal: true}

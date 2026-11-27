@@ -1,0 +1,7 @@
+# Teach kustomize that a SealedSecret produces the Secret the Deployment
+# reads, so a tenant namePrefix renames the reference too.
+nameReference:
+  - kind: SealedSecret
+    fieldSpecs:
+      - kind: Deployment
+        path: spec/template/spec/containers/envFrom/secretRef/name

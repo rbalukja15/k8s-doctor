@@ -1,0 +1,16 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: webshop-prod-globex
+  namespace: argocd
+spec:
+  project: shop
+  source:
+    repoURL: https://git.example.com/platform/gitops.git
+    targetRevision: main
+    path: deployables/webshop/overlays/prod/tenant/globex
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: webshop-globex
+  syncPolicy:
+    automated: {prune: true, selfHeal: true}

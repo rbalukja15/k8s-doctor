@@ -1,0 +1,18 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: webshop
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-staging
+spec:
+  ingressClassName: kong
+  rules:
+    - host: webshop.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: {service: {name: webshop, port: {name: http}}}
+  tls:
+    - hosts: [webshop.example.com]
+      secretName: webshop-tls
