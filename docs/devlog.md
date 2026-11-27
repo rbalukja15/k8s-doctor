@@ -2,6 +2,13 @@
 
 Short notes on what was built and what was learned, newest first.
 
+## 2026-11-24: Drift 2/3: field diff and allowlist
+
+- Matched objects are flattened to manifest-style field paths, with list items addressed by name, and compared. ConfigMap and Secret keys compare by name only, which is enough to catch a config key one tenant has and the other lacks.
+- Most expected differences are not paths but values: a reference to a renamed object, the overlay's namespace, a tenant name inside a hostname. Those are normalized before comparing, so the allowlist stays short. The `hostnames` preset replaces the overlay's name only inside hostname-shaped values. A first version replaced it everywhere, which would have hidden an `environment: staging` vs `environment: prod` label, the very drift this exists to catch.
+- `imageTags` compares images without their tag or digest instead of skipping the image path, so a changed registry or repository still shows.
+- The two GitOps tenants come out with no drift at all, and staging vs a prod tenant only with the HPA that the prod layer adds, which is the baseline the eval fixtures in #30 will build on.
+
 ## 2026-11-24: Drift 1/3: matching objects across overlays
 
 - Objects match on kind plus the name they have in their source file. The collector records that name as `origins` in the snapshot, so drift needs only two snapshots, not the repositories.
