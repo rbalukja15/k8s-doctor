@@ -68,6 +68,9 @@ func (r *Report) WriteText(w io.Writer, opts TextOptions) error {
 	if r.Input.Overlay != "" {
 		header += " (overlay " + r.Input.Overlay + ")"
 	}
+	if d := r.Drift; d != nil {
+		header = fmt.Sprintf("k8s-doctor %s · drift · %s → %s", r.Tool.Version, d.Base.label(), d.Target.label())
+	}
 	t.printf("%s\n\n", t.style(bold, header))
 
 	if len(r.Findings) == 0 {
@@ -153,4 +156,11 @@ func wrap(text string, width int) []string {
 		lines = append(lines, cur.String())
 	}
 	return lines
+}
+
+func (d DriftSide) label() string {
+	if d.Overlay != "" && d.Overlay != d.Path {
+		return d.Path + " (" + d.Overlay + ")"
+	}
+	return d.Path
 }

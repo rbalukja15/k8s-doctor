@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/rbalukja15/k8s-doctor/report.v1.json",
   "title": "k8s-doctor report",
-  "description": "Output of `k8s-doctor check --format json`. Terminal output, the HTML report and the eval harness are all built from this document.",
+  "description": "Output of `k8s-doctor check --format json` and `k8s-doctor drift --format json`. Terminal output, the HTML report and the eval harness are all built from this document.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "tool", "generatedAt", "input", "summary", "findings", "groups", "rules"],
@@ -28,6 +28,16 @@
         "path": { "type": "string" },
         "overlay": { "type": "string" },
         "llm": { "type": "boolean" }
+      }
+    },
+    "drift": {
+      "description": "Set by `k8s-doctor drift`: the two overlays compared. input then describes the target.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base", "target"],
+      "properties": {
+        "base": { "$ref": "#/$defs/driftSide" },
+        "target": { "$ref": "#/$defs/driftSide" }
       }
     },
     "summary": {
@@ -58,6 +68,15 @@
   },
   "$defs": {
     "mode": { "enum": ["manifest", "cluster"] },
+    "driftSide": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "overlay": { "type": "string" }
+      }
+    },
     "severity": { "enum": ["critical", "high", "medium", "low"] },
     "findingId": { "type": "string", "pattern": "^KD-[0-9a-f]{16}$" },
     "ruleId": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },

@@ -1,0 +1,42 @@
+# A prod tenant built like the ones in e2e/gitops, with two changes no
+# preset expects: the pod no longer sets runAsNonRoot, and its config has a
+# key the other tenants lack.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: webshop-umbrella
+namePrefix: umbrella-
+resources:
+  - ../../../e2e/gitops/deployables/webshop/overlays/prod/common
+  - sealedsecret.yaml
+components:
+  - ../../../e2e/gitops/components/ip-whitelist
+images:
+  - name: registry.example.com/shop/webshop
+    newTag: 1.8.0
+configMapGenerator:
+  - name: webshop-config
+    behavior: merge
+    literals:
+      - FEATURE_BETA=true
+patches:
+  - target: {kind: Deployment, name: webshop}
+    patch: |-
+      - op: remove
+        path: /spec/template/spec/securityContext/runAsNonRoot
+  - target: {kind: Ingress, name: webshop}
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: umbrella.webshop.example.com
+      - op: replace
+        path: /spec/tls/0/hosts/0
+        value: umbrella.webshop.example.com
+replacements:
+  - source: {kind: Ingress, name: webshop, fieldPath: spec.rules.0.host}
+    targets:
+      - select: {kind: ConfigMap, name: webshop-config}
+        fieldPaths: [data.PUBLIC_HOST]
+  - source: {kind: KongPlugin, name: ip-whitelist, fieldPath: metadata.name}
+    targets:
+      - select: {kind: Ingress, name: webshop}
+        fieldPaths: ["metadata.annotations.[konghq.com/plugins]"]

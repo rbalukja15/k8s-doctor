@@ -31,14 +31,17 @@ const (
 
 // Report is the JSON report.
 type Report struct {
-	SchemaVersion string       `json:"schemaVersion"`
-	Tool          Tool         `json:"tool"`
-	GeneratedAt   time.Time    `json:"generatedAt"`
-	Input         Input        `json:"input"`
-	Summary       Summary      `json:"summary"`
-	Findings      []Finding    `json:"findings"`
-	Groups        []Group      `json:"groups"`
-	Rules         []RuleStatus `json:"rules"`
+	SchemaVersion string    `json:"schemaVersion"`
+	Tool          Tool      `json:"tool"`
+	GeneratedAt   time.Time `json:"generatedAt"`
+	Input         Input     `json:"input"`
+	// Drift is set on a drift report (k8s-doctor drift) and names the two
+	// overlays compared.
+	Drift    *Drift       `json:"drift,omitempty"`
+	Summary  Summary      `json:"summary"`
+	Findings []Finding    `json:"findings"`
+	Groups   []Group      `json:"groups"`
+	Rules    []RuleStatus `json:"rules"`
 }
 
 // Tool identifies the k8s-doctor build that produced the report.
@@ -150,11 +153,6 @@ func Build(snap *snapshot.Snapshot, reg *rules.Registry, engine *rules.Engine, r
 		r.Rules = append(r.Rules, st)
 	}
 
-	r.Summary = Summary{BySeverity: map[string]int{}, RulesRun: len(res.RulesRun), RulesNotRun: len(res.NotRun)}
-	for _, s := range rules.Severities() {
-		r.Summary.BySeverity[s.String()] = 0
-	}
-	var worst rules.Severity
 	for _, f := range res.Findings {
 		rule, _ := reg.Get(f.RuleID)
 		explanation := Explanation{Text: rule.Description(), Source: SourceRule}
@@ -166,6 +164,19 @@ func Build(snap *snapshot.Snapshot, reg *rules.Registry, engine *rules.Engine, r
 			Category:    rule.Category(),
 			Explanation: explanation,
 		})
+	}
+	r.summarize(len(res.RulesRun), len(res.NotRun))
+	return r
+}
+
+// summarize fills the summary from the findings.
+func (r *Report) summarize(rulesRun, rulesNotRun int) {
+	r.Summary = Summary{BySeverity: map[string]int{}, RulesRun: rulesRun, RulesNotRun: rulesNotRun}
+	for _, s := range rules.Severities() {
+		r.Summary.BySeverity[s.String()] = 0
+	}
+	var worst rules.Severity
+	for _, f := range r.Findings {
 		r.Summary.BySeverity[f.Severity.String()]++
 		worst = max(worst, f.Severity)
 	}
@@ -173,7 +184,6 @@ func Build(snap *snapshot.Snapshot, reg *rules.Registry, engine *rules.Engine, r
 		r.Summary.Worst = worst.String()
 	}
 	r.Summary.Total = len(r.Findings)
-	return r
 }
 
 // WorstSeverity returns the most severe finding's severity and false when

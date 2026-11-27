@@ -1,6 +1,6 @@
 # Overlay drift
 
-Drift compares two kustomize overlays of the same application and reports what differs beyond what is expected. It works for two environments (`overlays/staging` vs a prod tenant) and for two tenants in one environment (`tenant/acme` vs `tenant/globex`). The command that runs it is #30.
+Drift compares two kustomize overlays of the same application and reports what differs beyond what is expected. It works for two environments (`overlays/staging` vs a prod tenant) and for two tenants in one environment (`tenant/acme` vs `tenant/globex`). Run it with `k8s-doctor drift --base <overlay> --target <overlay>` ([cli.md](cli.md#drift)).
 
 ## Matching
 
@@ -47,8 +47,16 @@ Leaving `presets` out gives the default set above; `presets: []` turns them all 
 | `ingressClassAndIssuer` | Ingress class and cert-manager issuer (from #43) |
 | `ipAllowlists` | KongPlugin `config.allow` and `config.deny` (from #43) |
 
+The `rules` section of the config does not apply to drift, and naming a drift rule there is an error; the allowlist is how a difference is accepted.
+
 Allowlist entries are field-path globs, optionally limited to one kind with `Kind:`. `*` matches within one path segment and `**` across segments.
+
+## Fixtures
+
+`fixtures/drift/` holds labeled pairs of overlays, run by `TestDriftFixtures` with the default presets: an environment pair (staging vs `acme`, where only the prod HPA is drift), a clean tenant pair (`acme` vs `globex`), a drifted tenant (`umbrella`, no `runAsNonRoot` and an extra config key) and a near-miss tenant (`hooli`, which differs only where a preset expects it). The format is in [fixtures/README.md](../fixtures/README.md#drift-fixtures).
 
 ## Not covered yet
 
-Ingress, NetworkPolicy and KongPlugin are not in the snapshot until #43. They take part in matching and diffing once they are.
+- Ingress, NetworkPolicy and KongPlugin are not in the snapshot until #43. They take part in matching and diffing once they are.
+- The HTML report's drift section waits for the HTML report (#19), and per-target drift in the v2 report for #41.
+- `make eval` is still a stub (#21); the drift fixtures are ready for it to score.
