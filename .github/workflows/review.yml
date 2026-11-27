@@ -2,7 +2,7 @@ name: Review
 
 on:
   pull_request:
-    types: [opened, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
   contents: read
@@ -14,8 +14,8 @@ concurrency:
 
 jobs:
   # Runs the ponytail-review skill on the pull request and posts its report
-  # as one comment. It reviews once per PR; re-run the job from the Actions
-  # tab to review again after new pushes.
+  # as one comment. It reviews again on every push, so commits made after a
+  # review are checked too; a newer push cancels a review still in progress.
   # Fork PRs are skipped: GitHub gives them no secrets and a read-only token.
   ponytail:
     if: >-
