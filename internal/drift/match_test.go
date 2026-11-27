@@ -119,3 +119,15 @@ func TestMatchPrefixAndSuffix(t *testing.T) {
 		t.Error("no pairs")
 	}
 }
+
+// Two objects with one kind, source name and namespace (two prefixes in one
+// overlay) are both kept, under their built names, instead of one
+// replacing the other.
+func TestMatchAmbiguousIdentity(t *testing.T) {
+	origins := map[string]string{"Service/shop/a-api": "api", "Service/shop/b-api": "api"}
+	spec := snapshot.Spec{Services: []snapshot.Service{{ObjectMeta: meta("shop", "a-api")}, {ObjectMeta: meta("shop", "b-api")}}}
+	m := drift.Match(overlaySnapshot("shop", origins, spec), overlaySnapshot("shop", origins, spec))
+	if len(m.Pairs) != 2 || len(m.OnlyInBase)+len(m.OnlyInTarget) != 0 {
+		t.Errorf("pairs %s, only in base %v, only in target %v; want both services paired", identities(m.Pairs), m.OnlyInBase, m.OnlyInTarget)
+	}
+}

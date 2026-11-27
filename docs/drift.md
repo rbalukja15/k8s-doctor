@@ -17,6 +17,8 @@ Before comparing, values are normalized:
 - **Namespace:** a value that is exactly the overlay's namespace becomes `{namespace}`.
 - **Overlay name:** with the `hostnames` preset, the overlay's name becomes `{overlay}` where it is a whole part of a DNS label inside a hostname, so `acme.shop.example.com` and `api-acme.shop.example.com` normalize. A bare `staging`, or `staging` in a URL path or image repository, is a real value and still shows as drift.
 
+Findings print both values. The snapshot holds no env values or annotations, so a literal credential cannot reach a finding today; when env values arrive (#44), values of secret-looking names will be masked.
+
 Each remaining difference is a `drift-field` finding on the target object, with both values as evidence (`(unset)` when one side lacks the field):
 
 | Severity | Applies to |

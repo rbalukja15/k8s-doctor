@@ -24,9 +24,13 @@ func TestDriftCommand(t *testing.T) {
 			t.Errorf("text output lacks %q:\n%s", want, out)
 		}
 	}
-	// --fail-on high (the default) passes on a medium finding.
-	if code, _, _ := run("drift", "--base", overlays+"staging", "--target", overlays+"prod/tenant/acme"); code != cli.ExitOK {
-		t.Errorf("default --fail-on: code %d, want 0", code)
+	// --fail-on defaults to medium for drift, so the missing HPA fails the
+	// run; --fail-on high lets it pass.
+	if code, _, _ := run("drift", "--base", overlays+"staging", "--target", overlays+"prod/tenant/acme"); code != cli.ExitFindingMedium {
+		t.Errorf("default --fail-on: code %d, want %d", code, cli.ExitFindingMedium)
+	}
+	if code, _, _ := run("drift", "--base", overlays+"staging", "--target", overlays+"prod/tenant/acme", "--fail-on", "high"); code != cli.ExitOK {
+		t.Errorf("--fail-on high: code %d, want 0", code)
 	}
 	// Two tenants: clean.
 	code, out, _ = run("drift", "--base", overlays+"prod/tenant/acme", "--target", overlays+"prod/tenant/globex", "--format", "json")
@@ -89,6 +93,18 @@ func TestDriftUsage(t *testing.T) {
 	if code, _, errOut := run("drift", "--base", overlays+"staging", "--target", overlays+"staging/"); code != cli.ExitUsage ||
 		!strings.Contains(errOut, "same directory") {
 		t.Errorf("same directory: code %d, stderr %q", code, errOut)
+	}
+	abs, err := filepath.Abs(overlays + "staging")
+	if err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(t.TempDir(), "current")
+	if err := os.Symlink(abs, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if code, _, errOut := run("drift", "--base", overlays+"staging", "--target", link); code != cli.ExitUsage ||
+		!strings.Contains(errOut, "same directory") {
+		t.Errorf("symlink to the same directory: code %d, stderr %q", code, errOut)
 	}
 	if code, _, errOut := run("drift", "--base", "nope", "--target", overlays+"staging"); code != cli.ExitError || errOut == "" {
 		t.Errorf("missing base: code %d, stderr %q", code, errOut)

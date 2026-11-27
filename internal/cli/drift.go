@@ -4,7 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"path/filepath"
+	"os"
 	"time"
 
 	"github.com/rbalukja15/k8s-doctor/internal/collector"
@@ -20,7 +20,8 @@ environments or two tenants, and report what differs beyond the expected
 differences in the drift section of the config (see docs/drift.md).
 Findings point at objects in the target.
 
-Exit codes are the same as for check.
+Exit codes are the same as for check, but --fail-on defaults to medium,
+so an object missing from one overlay fails the run.
 
 Flags:
 `
@@ -48,7 +49,7 @@ func driftCmd(args []string, env Env) int {
 	fs.StringVar(&o.configPath, "config", "", "config file (default ./.k8s-doctor.yaml if present)")
 	fs.StringVar(&o.format, "format", "text", "output format: text or json")
 	fs.StringVar(&o.reportPath, "report", "", "also write the JSON report to this file")
-	fs.StringVar(&o.failOn, "fail-on", "high", "lowest severity that makes the exit code non-zero: critical, high, medium, low or none")
+	fs.StringVar(&o.failOn, "fail-on", "medium", "lowest severity that makes the exit code non-zero: critical, high, medium, low or none")
 	fs.StringVar(&o.color, "color", "auto", "colorize text output: auto, always or never (NO_COLOR is honored)")
 	fs.BoolVar(&o.explain, "explain", false, "print each finding's explanation in text output")
 	if err := fs.Parse(args); err != nil {
@@ -76,9 +77,7 @@ func runDrift(o *driftOptions, env Env) (int, error) {
 	if o.base == "" || o.target == "" {
 		return 0, fmt.Errorf("%w: --base and --target are both required", errUsage)
 	}
-	if same, err := sameDir(o.base, o.target); err != nil {
-		return 0, err
-	} else if same {
+	if sameDir(o.base, o.target) {
 		return 0, fmt.Errorf("%w: --base and --target are the same directory", errUsage)
 	}
 	failOn, err := parseFailOn(o.failOn)
@@ -138,15 +137,13 @@ func runDrift(o *driftOptions, env Env) (int, error) {
 	return ExitCodeFor(worst), nil
 }
 
-// sameDir reports whether two paths name the same directory.
-func sameDir(a, b string) (bool, error) {
-	aa, err := filepath.Abs(a)
+// sameDir reports whether two paths name the same directory, following
+// symlinks. A path that cannot be read is left to the collector to report.
+func sameDir(a, b string) bool {
+	ai, err := os.Stat(a)
 	if err != nil {
-		return false, err
+		return false
 	}
-	bb, err := filepath.Abs(b)
-	if err != nil {
-		return false, err
-	}
-	return aa == bb, nil
+	bi, err := os.Stat(b)
+	return err == nil && os.SameFile(ai, bi)
 }

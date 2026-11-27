@@ -308,31 +308,7 @@ func objects(s *snapshot.Snapshot) (map[string]map[string]any, error) {
 		}
 		out[ref.String()] = m
 	}
-	sp := &s.Spec
-	for i := range sp.Namespaces {
-		add(snapshot.ResourceRef{Kind: "Namespace", Name: sp.Namespaces[i].Name}, sp.Namespaces[i])
-	}
-	for i := range sp.Workloads {
-		add(sp.Workloads[i].Ref(), sp.Workloads[i])
-	}
-	ref := func(kind string, m snapshot.ObjectMeta) snapshot.ResourceRef {
-		return snapshot.ResourceRef{Kind: kind, Namespace: m.Namespace, Name: m.Name}
-	}
-	for i := range sp.Services {
-		add(ref("Service", sp.Services[i].ObjectMeta), sp.Services[i])
-	}
-	for i := range sp.PodDisruptionBudgets {
-		add(ref("PodDisruptionBudget", sp.PodDisruptionBudgets[i].ObjectMeta), sp.PodDisruptionBudgets[i])
-	}
-	for i := range sp.HorizontalPodAutoscalers {
-		add(ref("HorizontalPodAutoscaler", sp.HorizontalPodAutoscalers[i].ObjectMeta), sp.HorizontalPodAutoscalers[i])
-	}
-	for i := range sp.ConfigMaps {
-		add(ref("ConfigMap", sp.ConfigMaps[i].ObjectMeta), sp.ConfigMaps[i])
-	}
-	for i := range sp.Secrets {
-		add(ref("Secret", sp.Secrets[i].ObjectMeta), sp.Secrets[i])
-	}
+	walk(&s.Spec, add)
 	return out, errors.Join(errs...)
 }
 

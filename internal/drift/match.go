@@ -125,11 +125,21 @@ func identities(s *snapshot.Snapshot) map[Identity]snapshot.ResourceRef {
 		ids[i] = Identity{Kind: r.Kind, Name: name}
 		count[ids[i]]++
 	}
+	nsCount := map[Identity]int{}
+	for i, r := range refs {
+		if count[ids[i]] > 1 {
+			ids[i].Namespace = r.Namespace
+			nsCount[ids[i]]++
+		}
+	}
 	out := make(map[Identity]snapshot.ResourceRef, len(refs))
 	for i, r := range refs {
 		id := ids[i]
-		if count[id] > 1 {
-			id.Namespace = r.Namespace
+		if nsCount[id] > 1 {
+			// Same kind, source name and namespace, so only the built name
+			// tells them apart. They then match only an object with that
+			// built name, rather than one silently replacing the other.
+			id.Name = r.Name
 		}
 		out[id] = r
 	}
@@ -139,31 +149,38 @@ func identities(s *snapshot.Snapshot) map[Identity]snapshot.ResourceRef {
 // objectRefs lists every object the snapshot models.
 func objectRefs(s *snapshot.Spec) []snapshot.ResourceRef {
 	var out []snapshot.ResourceRef
-	meta := func(kind string, m snapshot.ObjectMeta) {
-		out = append(out, snapshot.ResourceRef{Kind: kind, Namespace: m.Namespace, Name: m.Name})
+	walk(s, func(ref snapshot.ResourceRef, _ any) { out = append(out, ref) })
+	return out
+}
+
+// walk calls fn for every object the snapshot models, with its ref and the
+// snapshot value. Matching and diffing both use it, so a kind added here
+// is matched and diffed alike.
+func walk(s *snapshot.Spec, fn func(ref snapshot.ResourceRef, v any)) {
+	ref := func(kind string, m snapshot.ObjectMeta) snapshot.ResourceRef {
+		return snapshot.ResourceRef{Kind: kind, Namespace: m.Namespace, Name: m.Name}
 	}
 	for i := range s.Namespaces {
-		out = append(out, snapshot.ResourceRef{Kind: "Namespace", Name: s.Namespaces[i].Name})
+		fn(snapshot.ResourceRef{Kind: "Namespace", Name: s.Namespaces[i].Name}, s.Namespaces[i])
 	}
 	for i := range s.Workloads {
-		out = append(out, s.Workloads[i].Ref())
+		fn(s.Workloads[i].Ref(), s.Workloads[i])
 	}
 	for i := range s.Services {
-		meta("Service", s.Services[i].ObjectMeta)
+		fn(ref("Service", s.Services[i].ObjectMeta), s.Services[i])
 	}
 	for i := range s.PodDisruptionBudgets {
-		meta("PodDisruptionBudget", s.PodDisruptionBudgets[i].ObjectMeta)
+		fn(ref("PodDisruptionBudget", s.PodDisruptionBudgets[i].ObjectMeta), s.PodDisruptionBudgets[i])
 	}
 	for i := range s.HorizontalPodAutoscalers {
-		meta("HorizontalPodAutoscaler", s.HorizontalPodAutoscalers[i].ObjectMeta)
+		fn(ref("HorizontalPodAutoscaler", s.HorizontalPodAutoscalers[i].ObjectMeta), s.HorizontalPodAutoscalers[i])
 	}
 	for i := range s.ConfigMaps {
-		meta("ConfigMap", s.ConfigMaps[i].ObjectMeta)
+		fn(ref("ConfigMap", s.ConfigMaps[i].ObjectMeta), s.ConfigMaps[i])
 	}
 	for i := range s.Secrets {
-		meta("Secret", s.Secrets[i].ObjectMeta)
+		fn(ref("Secret", s.Secrets[i].ObjectMeta), s.Secrets[i])
 	}
-	return out
 }
 
 func sortedKeys(m map[Identity]snapshot.ResourceRef) []Identity {
