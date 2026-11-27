@@ -76,6 +76,15 @@ func Manifests(dir string) (*snapshot.Snapshot, error) {
 		}
 	}
 	snap.Spec = b.spec()
+	if snap.Source.Overlay != nil {
+		refs := make([]string, 0, len(b.seen))
+		for r := range b.seen {
+			refs = append(refs, r)
+		}
+		if snap.Source.Overlay.Origins, err = origins(dir, refs); err != nil {
+			return nil, err
+		}
+	}
 	if err := snap.Validate(); err != nil {
 		return nil, err
 	}

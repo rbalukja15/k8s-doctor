@@ -69,15 +69,15 @@ type Fixture struct {
 }
 
 // Discover finds every directory under root that contains an expected.yaml,
-// sorted by name.
+// sorted by name. The e2e and drift directories are skipped.
 func Discover(root string) ([]Fixture, error) {
 	var out []Fixture
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if d.IsDir() && path == filepath.Join(root, E2EDir) {
-			return filepath.SkipDir // end-to-end layouts have their own format
+		if d.IsDir() && (path == filepath.Join(root, E2EDir) || path == filepath.Join(root, DriftDir)) {
+			return filepath.SkipDir // end-to-end layouts and drift fixtures have their own format
 		}
 		if d.IsDir() || d.Name() != ExpectedFile {
 			return nil
@@ -187,14 +187,20 @@ func (d Diff) Empty() bool { return len(d.Missing) == 0 && len(d.Unexpected) == 
 // Compare diffs the engine's findings against the fixture's expectations,
 // restricted to the fixture's rule scope.
 func (f *Fixture) Compare(res rules.Result) Diff {
+	return diffKeys(f.Expected.Findings, res.Findings, f.InScope)
+}
+
+// diffKeys compares expected findings against the actual findings of the
+// rules inScope accepts.
+func diffKeys(expected []ExpectedFinding, actual []rules.Finding, inScope func(string) bool) Diff {
 	want := map[rules.Key]bool{}
-	for _, ef := range f.Expected.Findings {
+	for _, ef := range expected {
 		want[ef.Key()] = true
 	}
 	got := map[rules.Key]bool{}
-	for i := range res.Findings {
-		if f.InScope(res.Findings[i].RuleID) {
-			got[res.Findings[i].Key()] = true
+	for i := range actual {
+		if inScope(actual[i].RuleID) {
+			got[actual[i].Key()] = true
 		}
 	}
 	var d Diff

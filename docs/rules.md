@@ -39,3 +39,5 @@ rules:
 ```
 
 Severity overrides do not change finding IDs.
+
+Overlay drift is configured in the same file, under `drift`; see [drift.md](drift.md).

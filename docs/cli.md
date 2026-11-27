@@ -9,6 +9,7 @@ $ k8s-doctor --manifests deploy/                         # a folder of plain man
 $ k8s-doctor check --snapshot snapshot.json            # or simply: k8s-doctor --snapshot snapshot.json
 $ k8s-doctor check --snapshot snapshot.json --format json > report.json
 $ k8s-doctor check --snapshot snapshot.json --report report.json --fail-on medium
+$ k8s-doctor drift --base overlays/staging --target overlays/prod/tenant/acme   # overlay drift
 $ k8s-doctor rules                                      # list built-in rules
 $ k8s-doctor schema                                     # JSON Schema of the report
 ```
@@ -26,7 +27,7 @@ Exactly one of `--cluster`, `--manifests` and `--snapshot` is required. `k8s-doc
 
 ### Manifests mode
 
-- If the directory holds a `kustomization.yaml` (or `.yml`, or `Kustomization`), it is built in-process with kustomize's `krusty` API, exactly as `kustomize build` would. The overlay's `namePrefix`, `nameSuffix` and `namespace` are recorded for drift matching (#28).
+- If the directory holds a `kustomization.yaml` (or `.yml`, or `Kustomization`), it is built in-process with kustomize's `krusty` API, exactly as `kustomize build` would. The overlay's `namePrefix`, `nameSuffix` and `namespace` are recorded, and `origins` maps every renamed object to the name in its source file, for drift matching (#28). Origins account for prefixes and suffixes set in any kustomization the overlay includes, not only its own, and strip generator hashes.
 - Otherwise every `.yaml`, `.yml` and `.json` file under it is parsed, including multi-document files and `kind: List`. Hidden directories are skipped. A nested directory with its own kustomization is an error, because reading its files raw would skip the overlay: point `--manifests` at that overlay instead.
 - Objects without a namespace get `default`, as the API server would assign.
 - Kinds the snapshot does not model (Ingress, RBAC, CRDs, ...) are ignored.
@@ -72,6 +73,17 @@ and resource context where possible.
 Provider errors fall back to the rule description and produce a warning on
 stderr. `input.llm` is true only when at least one generated explanation is
 included in the report. The default configuration is offline.
+
+## Drift
+
+```console
+$ k8s-doctor drift --base overlays/staging --target overlays/prod/tenant/acme
+$ k8s-doctor drift --base overlays/prod/tenant/acme --target overlays/prod/tenant/globex --format json
+```
+
+`drift` builds two kustomize overlays with the manifest collector and reports what differs between them beyond the differences the `drift` section of the config expects ([drift.md](drift.md)). It works the same for two environments and for two tenants. Findings point at objects in the target.
+
+It takes `--base` and `--target` (both required), plus `--config`, `--format`, `--report`, `--fail-on`, `--color` and `--explain` with the same meaning as for `check`. The exit codes are the same too, but `--fail-on` defaults to `medium`, so an object missing from one overlay or a config key difference fails the run; pass `--fail-on high` to fail on security differences only. Only the `drift` section of the config applies: per-rule settings under `rules` are for `check`, and naming a drift rule there is an error. Accept a difference with `drift.allowlist` instead. `--base` and `--target` must be different directories, symlinks included. The JSON report has a `drift` object with the `path` and `overlay` name of each side, `input` describes the target, and `rules` lists the two drift rules.
 
 ## Exit codes
 

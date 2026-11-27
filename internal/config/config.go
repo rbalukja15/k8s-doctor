@@ -46,8 +46,14 @@ type RuleConfig struct {
 
 // Drift configures overlay-drift detection.
 type Drift struct {
-	// Allowlist holds field-path globs whose differences between overlays
-	// are expected, e.g. "spec.replicas". Matching lands with #29.
+	// Presets names built-in groups of expected differences (replicas,
+	// resources, imageTags, hostnames, hpaBounds, ingressClassAndIssuer,
+	// ipAllowlists). Unset means the defaults; an empty list means none.
+	Presets *[]string `json:"presets,omitempty"`
+	// Allowlist holds more field-path globs whose differences between
+	// overlays are expected, e.g. "spec.replicas" or
+	// "Deployment:spec.template.spec.containers[*].env[name=LOG_LEVEL]**".
+	// * matches within one path segment, ** across segments.
 	Allowlist []string `json:"allowlist,omitempty"`
 }
 

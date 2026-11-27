@@ -2,6 +2,27 @@
 
 Short notes on what was built and what was learned, newest first.
 
+## 2026-11-24: Drift 3/3: the drift command
+
+- `k8s-doctor drift --base <overlay> --target <overlay>` builds both overlays, matches and diffs them, and writes the same report as `check`, with a `drift` object naming the two sides. Exit codes and `--fail-on` work as for `check`, so a CI job can gate on drift the same way.
+- Labeled drift fixtures under `fixtures/drift` cover an environment pair and a clean tenant pair from `e2e/gitops`, plus two tenants built for the purpose on the same layers: `umbrella`, which drifted, and `hooli`, which differs only where the presets expect it. `make eval` will score them once it exists (#21).
+- The HTML section (#19) and per-target drift in the v2 report (#41) wait for those issues.
+
+## 2026-11-24: Drift 2/3: field diff and allowlist
+
+- Matched objects are flattened to manifest-style field paths, with list items addressed by name, and compared. ConfigMap and Secret keys compare by name only, which is enough to catch a config key one tenant has and the other lacks.
+- Most expected differences are not paths but values: a reference to a renamed object, the overlay's namespace, a tenant name inside a hostname. Those are normalized before comparing, so the allowlist stays short. The `hostnames` preset replaces the overlay's name only inside hostname-shaped values. A first version replaced it everywhere, which would have hidden an `environment: staging` vs `environment: prod` label, the very drift this exists to catch.
+- `imageTags` compares images without their tag or digest instead of skipping the image path, so a changed registry or repository still shows.
+- The two GitOps tenants come out with no drift at all, and staging vs a prod tenant only with the HPA that the prod layer adds, which is the baseline the eval fixtures in #30 will build on.
+
+## 2026-11-24: Drift 1/3: matching objects across overlays
+
+- Objects match on kind plus the name they have in their source file. The collector records that name as `origins` in the snapshot, so drift needs only two snapshots, not the repositories.
+- kustomize strips its own name-tracking annotations at the end of a build, and the code that keeps them is internal to kustomize. So the collector reads the kustomization tree instead: every directory reachable through `resources`, `bases` and `components`, with each one's `namePrefix` and `nameSuffix` combined the way kustomize applies them (outer prefix first, inner suffix first), plus the generator names whose output gets a hash. A prefix set in a parent of the tenant overlay is found the same way as one in the tenant itself.
+- Namespaces and CRDs never get a prefix, and generator hashes use kustomize's own ten-character alphabet, so `app-production` next to an `app` generator keeps its name. One limit remains: affixes are not tied to the directory an object came from, so an unprefixed object whose name starts like a sibling branch's prefix loses that part. A test pins it.
+- An overlay's own Namespace object matches across overlays whatever it is called. Two objects with one source name in two namespaces of one overlay are kept apart rather than guessed at.
+- An object in one overlay only becomes a `drift-resource-missing` finding, for example the HPA the prod layer adds and staging lacks.
+
 ## 2026-11-24: End-to-end GitOps fixture
 
 - `fixtures/e2e/gitops` is a synthetic copy of a multi-tenant Argo CD repo: a base, a staging overlay, a prod layer that tenants build on, two kustomize Components, SealedSecrets and Applications. Later M7 issues test against it.

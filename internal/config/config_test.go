@@ -16,6 +16,7 @@ rules:
   image-tag-mutable:
     severity: high
 drift:
+  presets: [replicas, imageTags]
   allowlist:
     - spec.replicas
 `))
@@ -33,6 +34,9 @@ drift:
 	}
 	if len(c.Drift.Allowlist) != 1 {
 		t.Error("drift allowlist not parsed")
+	}
+	if c.Drift.Presets == nil || len(*c.Drift.Presets) != 2 {
+		t.Error("drift presets not parsed")
 	}
 }
 

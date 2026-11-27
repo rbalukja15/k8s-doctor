@@ -64,6 +64,11 @@ type Overlay struct {
 	NamePrefix string `json:"namePrefix,omitempty"`
 	NameSuffix string `json:"nameSuffix,omitempty"`
 	Namespace  string `json:"namespace,omitempty"`
+	// Origins maps an object's built ref ("Kind/namespace/name") to the
+	// name it has in its source file, for objects kustomize renamed: name
+	// prefixes and suffixes from any kustomization on the way, and
+	// generator hashes. Overlay drift (#28) matches objects on it.
+	Origins map[string]string `json:"origins,omitempty"`
 }
 
 // Validate checks the invariants every consumer relies on.

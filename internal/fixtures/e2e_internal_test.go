@@ -42,3 +42,20 @@ func TestLoadE2ERejects(t *testing.T) {
 		})
 	}
 }
+
+func TestDriftValidateRejects(t *testing.T) {
+	for name, e := range map[string]DriftExpected{
+		"unknown kind":     {Description: "d", Kind: "maybe", Base: "a", Target: "b"},
+		"clean with finds": {Description: "d", Kind: KindClean, Base: "a", Target: "b", Findings: []ExpectedFinding{{Rule: "drift-field", Resource: "Deployment/ns/x", Field: "spec"}}},
+		"positive empty":   {Description: "d", Kind: KindPositive, Base: "a", Target: "b"},
+		"no target":        {Description: "d", Kind: KindClean, Base: "a"},
+		"no description":   {Kind: KindClean, Base: "a", Target: "b"},
+		"not a drift rule": {Description: "d", Kind: KindPositive, Base: "a", Target: "b", Findings: []ExpectedFinding{{Rule: "pdb-missing", Resource: "Deployment/ns/x", Field: "spec"}}},
+		"no field":         {Description: "d", Kind: KindPositive, Base: "a", Target: "b", Findings: []ExpectedFinding{{Rule: "drift-field", Resource: "Deployment/ns/x"}}},
+	} {
+		f := DriftFixture{Name: name, Expected: e}
+		if err := f.Validate(); err == nil {
+			t.Errorf("%s: expected an error", name)
+		}
+	}
+}

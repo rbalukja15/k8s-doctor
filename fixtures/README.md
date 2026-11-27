@@ -10,12 +10,13 @@ fixtures/
 ├── clean/<name>/                 # no findings from ANY rule
 ├── kustomize/<name>/             # overlays exercising the manifest collector
 ├── e2e/<layout>/                 # whole repository layouts with several targets
+├── drift/<name>/                 # labeled overlay pairs for k8s-doctor drift
 └── <rule-id>/
     ├── positive/                 # the rule must fire, exactly as listed
     └── near-miss/                # looks like a problem, isn't: the rule stays quiet
 ```
 
-Every directory containing an `expected.yaml` is a fixture. Next to it is the input:
+Every directory containing an `expected.yaml` is a fixture; `e2e/` and `drift/` have formats of their own, described below. Next to it is the input:
 
 - `snapshot.json`: a snapshot in the format from [ADR-0002](../docs/adr/0002-collector-and-snapshot.md). Required for cluster-only rules, which need the `runtime` section.
 - `manifests/`: plain manifests or a kustomize overlay, read through the manifest collector exactly as `--manifests` would. Overlays can share bases from `fixtures/_bases/`, which holds no `expected.yaml` and so is not a fixture itself.
@@ -68,3 +69,20 @@ findings:                      # from every rule, each naming its target
 ```
 
 `TestE2EGitOps` checks the target list against the Applications, builds each target with the manifest collector, and compares findings. Each rule issue that targets this layout adds its findings here.
+
+## Drift fixtures
+
+`drift/<name>/` labels a pair of kustomize overlays for `k8s-doctor drift`. Its `expected.yaml`:
+
+```yaml
+description: "A prod tenant that dropped runAsNonRoot and added a config key."
+kind: positive                 # positive | clean | near-miss
+base: ../../e2e/gitops/deployables/webshop/overlays/prod/tenant/acme   # relative to this directory
+target: umbrella
+findings:                      # drift rules only, with the default presets
+  - rule: drift-field
+    resource: Deployment/webshop-umbrella/umbrella-webshop
+    field: spec.template.spec.securityContext.runAsNonRoot
+```
+
+An overlay that exists only for one fixture lives inside that fixture's directory and builds on the `e2e/gitops` layers. `TestDriftFixtures` runs each pair and requires at least one positive, clean and near-miss fixture.
